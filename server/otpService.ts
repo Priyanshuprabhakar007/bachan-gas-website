@@ -198,9 +198,6 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
     throw err;
   }
 
-  // Check environment context
-  const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined || process.env.NODE_ENV === "production";
-
   // Validate environment variables strictly
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
@@ -211,37 +208,7 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
                         !verifySid || isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
-    if (isNetlify) {
-      // In production/deployment, strictly require credentials and fail
-      throw new Error("Missing or invalid TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID environment variable in your Netlify settings.");
-    }
-
-    // In local development / preview sandbox, gracefully fallback to local mock OTP generation so testing works
-    console.warn("[Twilio OTP] Twilio credentials not configured in development. Falling back to local mock OTP.");
-    const otp = generateNumericOtp(6);
-    const now = Date.now();
-    otpStore.set(phone, {
-      phone,
-      code: otp,
-      expiresAt: now + 10 * 60 * 1000, // 10 minutes
-      attempts: 0,
-      purpose,
-      createdAt: now,
-    });
-
-    console.log(`\n========================================`);
-    console.log(`[TWILIO OTP - DEV/SANDBOX MODE]`);
-    console.log(`Recipient Phone : ${phone}`);
-    console.log(`Generated OTP   : ${otp}`);
-    console.log(`Expires In      : 10 minutes`);
-    console.log(`========================================\n`);
-
-    return {
-      ok: true,
-      message: "OTP generated successfully (Development / Preview Mode)",
-      channel: "dev",
-      devOtp: otp,
-    };
+    throw new Error("Missing or invalid TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID environment variable. Real-time OTP cannot be processed without these credentials.");
   }
 
   // Log configuration status safely (do not log the secret values)
@@ -297,9 +264,6 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 429, message: rateLimit.message };
   }
 
-  // Check environment context
-  const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined || process.env.NODE_ENV === "production";
-
   // Validate environment variables strictly
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
@@ -310,56 +274,7 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
                         !verifySid || isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
-    if (isNetlify) {
-      throw new Error("Missing or invalid TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID environment variable in your Netlify settings.");
-    }
-
-    // Checking local mock store in development fallback
-    const stored = otpStore.get(phone);
-    if (!stored) {
-      return {
-        ok: false,
-        statusCode: 404,
-        message: "No active OTP found for this number or it has expired. Please request a new code.",
-      };
-    }
-
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(phone);
-      return {
-        ok: false,
-        statusCode: 410,
-        message: "This OTP has expired. Please request a fresh verification code.",
-      };
-    }
-
-    if (stored.attempts >= 5) {
-      otpStore.delete(phone);
-      return {
-        ok: false,
-        statusCode: 429,
-        message: "Too many incorrect attempts. For security, please request a new OTP.",
-      };
-    }
-
-    // Timing-safe comparison
-    const inputBuf = Buffer.from(cleanedCode);
-    const storedBuf = Buffer.from(stored.code);
-    const isMatch = inputBuf.length === storedBuf.length && timingSafeEqual(inputBuf, storedBuf);
-
-    if (!isMatch) {
-      stored.attempts += 1;
-      const remaining = 5 - stored.attempts;
-      return {
-        ok: false,
-        statusCode: 401,
-        message: `Incorrect OTP code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Please request a new code."}`,
-      };
-    }
-
-    // Success
-    otpStore.delete(phone);
-    return { ok: true };
+    throw new Error("Missing or invalid TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_VERIFY_SERVICE_SID environment variable. Real-time OTP cannot be processed without these credentials.");
   }
 
   console.log("TWILIO_ACCOUNT_SID configured: true");

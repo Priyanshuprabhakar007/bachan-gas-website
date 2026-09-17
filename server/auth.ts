@@ -8,7 +8,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser, UserRole } from "@shared/schema";
-import { sendOtp, verifyOtp, getOtpServiceStatus, normalizePhone } from "./otpService";
+import { sendOtp, verifyOtp, getOtpServiceStatus, normalizePhone, isPlaceholderCredential } from "./otpService";
 
 export function sanitizeUser(user: SelectUser) {
   const { password, ...safeUser } = user;
@@ -268,5 +268,23 @@ export function setupAuth(app: Express) {
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(sanitizeUser(req.user!));
+  });
+
+  app.get("/api/otp-health", (req, res) => {
+    res.json({
+      working: true,
+      accountSidConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_ACCOUNT_SID)),
+      authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim() && !isPlaceholderCredential(process.env.TWILIO_AUTH_TOKEN)),
+      verifyServiceConfigured: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_VERIFY_SERVICE_SID)),
+    });
+  });
+
+  app.get("/api/auth/otp-health", (req, res) => {
+    res.json({
+      working: true,
+      accountSidConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_ACCOUNT_SID)),
+      authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim() && !isPlaceholderCredential(process.env.TWILIO_AUTH_TOKEN)),
+      verifyServiceConfigured: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_VERIFY_SERVICE_SID)),
+    });
   });
 }
