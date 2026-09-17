@@ -23,6 +23,22 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Custom CORS handler supporting cross-site credentials for separate domains
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : [];
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production")) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  }
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -60,7 +76,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+export async function initApp() {
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -85,10 +101,21 @@ app.use((req, res, next) => {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+  return app;
+}
 
-  // Port 3000 is the ONLY externally accessible port in AI Studio
-  const port = 3000;
-  httpServer.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
-  });
-})();
+const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
+
+if (!isNetlify) {
+  (async () => {
+    await initApp();
+    // Port 3000 is the ONLY externally accessible port in AI Studio
+    const port = 3000;
+    httpServer.listen(port, "0.0.0.0", () => {
+      log(`serving on port ${port}`);
+    });
+  })();
+}
+
+export { app, httpServer };
+

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, X, Link, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 interface ImageUploadProps {
   value: string | null;
@@ -19,6 +19,7 @@ const MAX_SIZE = 5 * 1024 * 1024;
 
 export function ImageUpload({ value, onChange, label, className }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [urlInput, setUrlInput] = useState("");
   const [storageKey, setStorageKey] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -36,17 +37,31 @@ export function ImageUpload({ value, onChange, label, className }: ImageUploadPr
     }
 
     setUploading(true);
+    setProgress(0);
     try {
       const fileRef = ref(storage, `products/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      setStorageKey(fileRef.fullPath);
-      onChange(url, fileRef.fullPath);
+      const uploadTask = uploadBytesResumable(fileRef, file);
+
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setProgress(progress);
+        }, 
+        (error) => {
+          console.error("Upload error:", error);
+          toast({ title: "Upload failed", description: "Image upload failed. Please try again.", variant: "destructive" });
+          setUploading(false);
+        }, 
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          setStorageKey(uploadTask.snapshot.ref.fullPath);
+          onChange(url, uploadTask.snapshot.ref.fullPath);
+          setUploading(false);
+        }
+      );
     } catch (err: unknown) {
-      console.error("Upload error:", err);
-      const message = err instanceof Error ? err.message : "Upload failed";
+      console.error("Upload initialization error:", err);
       toast({ title: "Upload failed", description: "Image upload failed. Please try again.", variant: "destructive" });
-    } finally {
       setUploading(false);
     }
   }, [onChange, toast]);
@@ -108,7 +123,7 @@ export function ImageUpload({ value, onChange, label, className }: ImageUploadPr
         {uploading && (
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">Uploading...</p>
+            <p className="mt-2 text-sm text-muted-foreground">Uploading {Math.round(progress)}%...</p>
           </div>
         )}
 
