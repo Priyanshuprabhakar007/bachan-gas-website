@@ -41,8 +41,3 @@ waitForPort = 5000
 [agent]
 integrations = ["javascript_object_storage:2.0.0"]
 
-[userenv]
-
-[userenv.shared]
-"Key: TWILIO_VERIFY_SERVICE_SID" = "VAcb5486fe5f4c1257350597e2c362f080"
-TWILIO_VERIFY_SERVICE_SID = "VAcb5486fe5f4c1257350597e2c362f080"
