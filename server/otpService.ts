@@ -114,16 +114,26 @@ export function getOtpServiceStatus() {
 export function normalizePhone(rawPhone: string): string {
   if (!rawPhone) return "";
   let cleaned = rawPhone.trim().replace(/[^\d+]/g, "");
-  if (!cleaned.startsWith("+")) {
-    const digits = cleaned.replace(/\D/g, "");
-    // If 10 digits (typical for India without country code), default to +91
-    if (digits.length === 10) {
-      cleaned = `+91${digits}`;
-    } else {
-      cleaned = `+${digits}`;
-    }
+  
+  // If it already starts with +, return it directly
+  if (cleaned.startsWith("+")) {
+    return cleaned;
   }
-  return cleaned;
+  
+  const digits = cleaned.replace(/\D/g, "");
+  
+  // 10 digits -> Indian number without country code, prefix with +91
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  }
+  
+  // 12 digits starting with 91 -> Indian number with country code but no +, prefix with +
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+${digits}`;
+  }
+  
+  // For other lengths/cases, prefix with +
+  return `+${digits}`;
 }
 
 /**

@@ -95,7 +95,7 @@ export function setupAuth(app: Express) {
     res.json({ enabled: true, mode: status.mode, configured: status.configured });
   });
 
-  app.post("/api/auth/send-otp", async (req, res) => {
+  const handleSendOtp = async (req: any, res: any) => {
     try {
       const { phone } = req.body;
       if (!phone) {
@@ -113,9 +113,12 @@ export function setupAuth(app: Express) {
         code: err.code
       });
     }
-  });
+  };
 
-  app.post("/api/auth/verify-otp", async (req, res) => {
+  app.post("/api/auth/send-otp", handleSendOtp);
+  app.post("/api/send-otp", handleSendOtp);
+
+  const handleVerifyOtp = async (req: any, res: any) => {
     try {
       const { phone, code } = req.body;
       if (!phone) {
@@ -154,12 +157,12 @@ export function setupAuth(app: Express) {
         });
       }
 
-      req.login(user, (loginErr) => {
+      req.login(user, (loginErr: any) => {
         if (loginErr) {
           console.error("OTP login session error:", loginErr);
           return res.status(500).json({ success: false, message: "Login failed. Please try again." });
         }
-        req.session.save((saveErr) => {
+        req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("OTP session save error:", saveErr);
             return res.status(500).json({ success: false, message: "Session error. Please try again." });
@@ -176,7 +179,10 @@ export function setupAuth(app: Express) {
         code: err.code
       });
     }
-  });
+  };
+
+  app.post("/api/auth/verify-otp", handleVerifyOtp);
+  app.post("/api/verify-otp", handleVerifyOtp);
 
   app.post("/api/register", async (req, res, next) => {
     try {
