@@ -99,7 +99,26 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to Send OTP", description: data.message || "Failed to send OTP via SMS" });
+        let errorDesc = data.message || "Failed to send OTP via SMS";
+        
+        // Handle Twilio specific codes
+        if (data.code === 21608) {
+          errorDesc = "This is a Twilio trial account. The recipient's phone number must be verified in the Twilio Console before trying again.";
+        } else if (data.code === 20003 || data.code === 70051) {
+          errorDesc = "Twilio credentials configured on Netlify are invalid. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.";
+        } else if (data.code === 60200) {
+          errorDesc = "The phone number is in an invalid format. Ensure it follows E.164 format (e.g., +917004204745).";
+        } else if (data.code === 60203) {
+          errorDesc = "Too many OTP attempts have been sent to this number. Please try again later.";
+        } else if (data.message?.includes("Missing") || data.message?.includes("invalid TWILIO")) {
+          errorDesc = `${data.message} Please check that TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are configured in Netlify Settings.`;
+        }
+
+        toast({ 
+          variant: "destructive", 
+          title: "Failed to Send OTP", 
+          description: errorDesc 
+        });
         return;
       }
       setDevOtp(data.devOtp || null);

@@ -88,69 +88,23 @@ export function isPlaceholderCredential(val?: string | null): boolean {
 let cachedTwilioClient: twilio.Twilio | null = null;
 let lastClientKey = "";
 
-export function getTwilioClient(): twilio.Twilio | null {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const apiKey = process.env.TWILIO_API_KEY?.trim();
-  const apiSecret = process.env.TWILIO_API_SECRET?.trim();
-
-  if (!accountSid || isPlaceholderCredential(accountSid)) {
-    return null;
-  }
-
-  const currentKey = `${accountSid}:${authToken || ""}:${apiKey || ""}:${apiSecret || ""}`;
-  if (cachedTwilioClient && lastClientKey === currentKey) {
-    return cachedTwilioClient;
-  }
-
-  try {
-    if (authToken && !isPlaceholderCredential(authToken)) {
-      cachedTwilioClient = twilio(accountSid, authToken);
-      lastClientKey = currentKey;
-      return cachedTwilioClient;
-    } else if (apiKey && apiSecret && !isPlaceholderCredential(apiKey) && !isPlaceholderCredential(apiSecret)) {
-      cachedTwilioClient = twilio(apiKey, apiSecret, { accountSid });
-      lastClientKey = currentKey;
-      return cachedTwilioClient;
-    }
-  } catch (err) {
-    console.error("Failed to initialize Twilio client:", err);
-    return null;
-  }
-
-  return null;
-}
-
 export function getOtpServiceStatus() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const apiKey = process.env.TWILIO_API_KEY?.trim();
-  const apiSecret = process.env.TWILIO_API_SECRET?.trim();
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
-  const phoneNumber = process.env.TWILIO_PHONE_NUMBER?.trim();
-  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
 
   const validAccount = !isPlaceholderCredential(accountSid);
   const validAuthToken = !isPlaceholderCredential(authToken);
-  const validApiKey = !isPlaceholderCredential(apiKey) && !isPlaceholderCredential(apiSecret);
-  const hasRealCredentials = Boolean(validAccount && (validAuthToken || validApiKey));
-  const isVerify = Boolean(hasRealCredentials && !isPlaceholderCredential(verifySid));
-  const isSms = Boolean(hasRealCredentials && (phoneNumber || !isPlaceholderCredential(messagingServiceSid)));
-
-  let mode: "verify" | "sms" | "dev" = "dev";
-  if (isVerify) mode = "verify";
-  else if (isSms) mode = "sms";
+  const validVerifySid = !isPlaceholderCredential(verifySid);
+  const hasRealCredentials = Boolean(validAccount && validAuthToken && validVerifySid);
 
   return {
     configured: hasRealCredentials,
-    mode,
-    provider: hasRealCredentials ? "Twilio" : "Twilio (Development Mode)",
+    mode: "verify",
+    provider: "Twilio Verify",
     hasAccountSid: validAccount,
     hasAuthToken: validAuthToken,
-    hasApiKey: validApiKey,
-    hasVerifyService: !isPlaceholderCredential(verifySid),
-    hasPhoneNumber: Boolean(phoneNumber || messagingServiceSid),
-    fromNumber: phoneNumber ? `${phoneNumber.slice(0, 4)}...${phoneNumber.slice(-3)}` : undefined,
+    hasVerifyService: validVerifySid,
   };
 }
 
@@ -234,118 +188,53 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
     throw err;
   }
 
+  // Validate environment variables strictly
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
-  const phoneNumber = process.env.TWILIO_PHONE_NUMBER?.trim();
-  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
-  const client = getTwilioClient();
 
-  let twilioAuthFailed = false;
-
-  // Mode 1: Twilio Verify Service
-  if (client && verifySid && !isPlaceholderCredential(verifySid)) {
-    try {
-      console.log(`[Twilio OTP] Sending Verify OTP to ${phone} via service ${verifySid.substring(0, 6)}...`);
-      await client.verify.v2.services(verifySid).verifications.create({
-        to: phone,
-        channel: "sms",
-      });
-      return {
-        ok: true,
-        message: "OTP sent to your phone via SMS",
-        channel: "verify",
-      };
-    } catch (twilioErr: any) {
-      console.error("[Twilio Verify Error]", {
-        code: twilioErr?.code,
-        message: twilioErr?.message,
-        status: twilioErr?.status,
-      });
-
-      if (twilioErr?.code === 70051 || twilioErr?.status === 401 || twilioErr?.code === 20003) {
-        console.warn("[Twilio Verify] Twilio authentication failed. In development/sandbox, falling back to local OTP generation.");
-        twilioAuthFailed = true;
-      } else if (twilioErr?.code === 20404) {
-        console.warn("[Twilio Verify] Twilio Verify Service SID not found. Falling back to local OTP generation.");
-        twilioAuthFailed = true;
-      } else if (twilioErr?.code === 60203) {
-        const err: any = new Error("Max delivery attempts reached for this phone number. Please try again later.");
-        err.statusCode = 429;
-        throw err;
-      } else if (twilioErr?.code === 60200) {
-        const err: any = new Error("Invalid phone number format for SMS delivery.");
-        err.statusCode = 400;
-        throw err;
-      } else {
-        console.warn("[Twilio Verify] Encountered error:", twilioErr?.message, "- falling back to local OTP generation.");
-        twilioAuthFailed = true;
-      }
-    }
+  if (!accountSid || isPlaceholderCredential(accountSid)) {
+    throw new Error("Missing or invalid TWILIO_ACCOUNT_SID environment variable.");
+  }
+  if (!authToken || isPlaceholderCredential(authToken)) {
+    throw new Error("Missing or invalid TWILIO_AUTH_TOKEN environment variable.");
+  }
+  if (!verifySid || isPlaceholderCredential(verifySid)) {
+    throw new Error("Missing or invalid TWILIO_VERIFY_SERVICE_SID environment variable.");
   }
 
-  // Generate 6-digit OTP for SMS or Dev mode
-  const otp = generateNumericOtp(6);
-  const now = Date.now();
-  const ttlMs = client && !twilioAuthFailed ? 5 * 60 * 1000 : 10 * 60 * 1000;
+  // Log configuration status safely (do not log the secret values)
+  console.log("TWILIO_ACCOUNT_SID configured: true");
+  console.log("TWILIO_AUTH_TOKEN configured: true");
+  console.log("TWILIO_VERIFY_SERVICE_SID configured: true");
 
-  otpStore.set(phone, {
-    phone,
-    code: otp,
-    expiresAt: now + ttlMs,
-    attempts: 0,
-    purpose,
-    createdAt: now,
-  });
+  console.log(`[Twilio OTP] Sending Verify OTP to ${phone} via service ${verifySid.substring(0, 6)}...`);
 
-  // Mode 2: Twilio Programmable SMS with In-App OTP Generation
-  if (client && !twilioAuthFailed && (phoneNumber || !isPlaceholderCredential(messagingServiceSid))) {
-    try {
-      console.log(`[Twilio OTP] Sending generated OTP to ${phone} via Twilio Programmable SMS...`);
-      const messagePayload: any = {
-        to: phone,
-        body: `Your Bachan Gas verification code is: ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`,
-      };
+  try {
+    const client = twilio(accountSid, authToken);
+    await client.verify.v2.services(verifySid).verifications.create({
+      to: phone,
+      channel: "sms",
+    });
 
-      if (messagingServiceSid && !isPlaceholderCredential(messagingServiceSid)) {
-        messagePayload.messagingServiceSid = messagingServiceSid;
-      } else if (phoneNumber) {
-        messagePayload.from = phoneNumber;
-      }
+    return {
+      ok: true,
+      message: "OTP sent to your phone via SMS",
+      channel: "verify",
+    };
+  } catch (error: any) {
+    console.error("Twilio OTP Error", {
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    });
 
-      await client.messages.create(messagePayload);
-      return {
-        ok: true,
-        message: "OTP sent to your phone via SMS",
-        channel: "sms",
-      };
-    } catch (smsErr: any) {
-      console.error("[Twilio SMS Error]", smsErr);
-      if (smsErr?.code === 21608) {
-        throw new Error("Trial Twilio Account: destination number is unverified. Verify this number in Twilio console or upgrade.");
-      }
-      if (smsErr?.code === 20003 || smsErr?.status === 401 || smsErr?.code === 70051 || smsErr?.code === 20404) {
-        console.warn("[Twilio SMS] Twilio authentication failed (Error 20003). Falling back to local OTP generation.");
-        // Fall through to Mode 3
-      } else {
-        console.warn("[Twilio SMS] Dispatch failed, falling back to development OTP:", smsErr?.message);
-        // Fall through to Mode 3
-      }
-    }
+    // Throw a cleaner error that is caught in the router to be sent as JSON
+    const cleanErr: any = new Error(error.message || "Unable to send verification code.");
+    cleanErr.code = error.code;
+    cleanErr.statusCode = error.status || 400;
+    throw cleanErr;
   }
-
-  // Mode 3: Development / Sandbox Fallback (if Twilio credentials are not set or failed authentication)
-  console.log(`\n========================================`);
-  console.log(`[TWILIO OTP - DEV/SANDBOX MODE]`);
-  console.log(`Recipient Phone : ${phone}`);
-  console.log(`Generated OTP   : ${otp}`);
-  console.log(`Expires In      : 10 minutes`);
-  console.log(`========================================\n`);
-
-  return {
-    ok: true,
-    message: "OTP generated successfully (Development / Preview Mode)",
-    channel: "dev",
-    devOtp: otp,
-  };
 }
 
 /**
@@ -367,87 +256,54 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 429, message: rateLimit.message };
   }
 
+  // Validate environment variables strictly
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
-  const client = getTwilioClient();
 
-  // Mode 1: Twilio Verify Service
-  if (client && verifySid && !isPlaceholderCredential(verifySid)) {
-    try {
-      const check = await client.verify.v2
-        .services(verifySid)
-        .verificationChecks.create({
-          to: phone,
-          code: cleanedCode,
-        });
+  if (!accountSid || isPlaceholderCredential(accountSid)) {
+    throw new Error("Missing or invalid TWILIO_ACCOUNT_SID environment variable.");
+  }
+  if (!authToken || isPlaceholderCredential(authToken)) {
+    throw new Error("Missing or invalid TWILIO_AUTH_TOKEN environment variable.");
+  }
+  if (!verifySid || isPlaceholderCredential(verifySid)) {
+    throw new Error("Missing or invalid TWILIO_VERIFY_SERVICE_SID environment variable.");
+  }
 
-      if (check.status === "approved") {
-        return { ok: true };
-      }
-      return { ok: false, statusCode: 401, message: "Incorrect OTP code. Please check and try again." };
-    } catch (verifyErr: any) {
-      console.error("[Twilio Verify Check Error]", verifyErr);
-      if (otpStore.has(phone)) {
-        console.log("[Twilio Verify] Checking in-app generated OTP store as fallback...");
-      } else {
-        if (verifyErr?.code === 60202) {
-          return { ok: false, statusCode: 429, message: "Max check attempts reached. Please request a new OTP." };
-        }
-        if (verifyErr?.code === 20404) {
-          return { ok: false, statusCode: 404, message: "Verification session expired. Please request a new OTP." };
-        }
-        if (verifyErr?.code === 70051 || verifyErr?.status === 401 || verifyErr?.code === 20003) {
-          return { ok: false, statusCode: 401, message: "Invalid or expired OTP code. Please request a new OTP." };
-        }
-        return { ok: false, statusCode: 400, message: verifyErr?.message || "Verification check failed" };
-      }
+  console.log("TWILIO_ACCOUNT_SID configured: true");
+  console.log("TWILIO_AUTH_TOKEN configured: true");
+  console.log("TWILIO_VERIFY_SERVICE_SID configured: true");
+
+  try {
+    const client = twilio(accountSid, authToken);
+    const check = await client.verify.v2
+      .services(verifySid)
+      .verificationChecks.create({
+        to: phone,
+        code: cleanedCode,
+      });
+
+    if (check.status === "approved") {
+      return { ok: true };
     }
-  }
+    
+    return { 
+      ok: false, 
+      statusCode: 401, 
+      message: "Incorrect OTP code. Please check and try again." 
+    };
+  } catch (error: any) {
+    console.error("Twilio OTP Error", {
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    });
 
-  // Mode 2 & 3: Stored In-App Generated OTP
-  const stored = otpStore.get(phone);
-  if (!stored) {
     return {
       ok: false,
-      statusCode: 404,
-      message: "No active OTP found for this number or it has expired. Please request a new code.",
+      statusCode: error.status || 400,
+      message: error.message || "Verification check failed",
     };
   }
-
-  if (Date.now() > stored.expiresAt) {
-    otpStore.delete(phone);
-    return {
-      ok: false,
-      statusCode: 410,
-      message: "This OTP has expired. Please request a fresh verification code.",
-    };
-  }
-
-  if (stored.attempts >= 5) {
-    otpStore.delete(phone);
-    return {
-      ok: false,
-      statusCode: 429,
-      message: "Too many incorrect attempts. For security, please request a new OTP.",
-    };
-  }
-
-  // Timing-safe comparison to prevent timing attacks
-  const inputBuf = Buffer.from(cleanedCode);
-  const storedBuf = Buffer.from(stored.code);
-
-  const isMatch = inputBuf.length === storedBuf.length && timingSafeEqual(inputBuf, storedBuf);
-
-  if (!isMatch) {
-    stored.attempts += 1;
-    const remaining = 5 - stored.attempts;
-    return {
-      ok: false,
-      statusCode: 401,
-      message: `Incorrect OTP code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Please request a new code."}`,
-    };
-  }
-
-  // Successful verification - clear OTP from memory
-  otpStore.delete(phone);
-  return { ok: true };
 }

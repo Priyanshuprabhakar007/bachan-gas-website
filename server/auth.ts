@@ -99,15 +99,19 @@ export function setupAuth(app: Express) {
     try {
       const { phone } = req.body;
       if (!phone) {
-        return res.status(400).json({ message: "Please enter a valid phone number." });
+        return res.status(400).json({ success: false, message: "Please enter a valid phone number." });
       }
 
       const result = await sendOtp(phone, "login");
-      return res.json(result);
+      return res.json({ success: true, ...result });
     } catch (err: any) {
       console.error("send-otp error:", err);
       const statusCode = err.statusCode || (err.message?.includes("Invalid") ? 400 : 500);
-      return res.status(statusCode).json({ message: err.message || "Failed to send OTP. Please try again." });
+      return res.status(statusCode).json({
+        success: false,
+        message: err.message || "Failed to send OTP. Please try again.",
+        code: err.code
+      });
     }
   });
 
@@ -115,10 +119,10 @@ export function setupAuth(app: Express) {
     try {
       const { phone, code } = req.body;
       if (!phone) {
-        return res.status(400).json({ message: "Phone number is required." });
+        return res.status(400).json({ success: false, message: "Phone number is required." });
       }
       if (!code || !/^\d{6}$/.test(code.toString().trim())) {
-        return res.status(400).json({ message: "Invalid OTP code. Please enter the 6-digit verification code." });
+        return res.status(400).json({ success: false, message: "Invalid OTP code. Please enter the 6-digit verification code." });
       }
 
       const formattedPhone = normalizePhone(phone);
@@ -126,7 +130,9 @@ export function setupAuth(app: Express) {
 
       if (!verification.ok) {
         return res.status(verification.statusCode || 401).json({
+          success: false,
           message: verification.message || "Invalid or expired OTP code. Please check and try again.",
+          code: verification.statusCode === 429 ? 60202 : undefined
         });
       }
 
@@ -151,20 +157,24 @@ export function setupAuth(app: Express) {
       req.login(user, (loginErr) => {
         if (loginErr) {
           console.error("OTP login session error:", loginErr);
-          return res.status(500).json({ message: "Login failed. Please try again." });
+          return res.status(500).json({ success: false, message: "Login failed. Please try again." });
         }
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("OTP session save error:", saveErr);
-            return res.status(500).json({ message: "Session error. Please try again." });
+            return res.status(500).json({ success: false, message: "Session error. Please try again." });
           }
           console.log("OTP login successful for user:", user!.id, formattedPhone);
-          res.json({ ok: true, user: sanitizeUser(user!) });
+          res.json({ ok: true, success: true, user: sanitizeUser(user!) });
         });
       });
     } catch (err: any) {
       console.error("verify-otp error:", err);
-      res.status(500).json({ message: "Verification failed. Please try again." });
+      res.status(500).json({
+        success: false,
+        message: err.message || "Verification failed. Please try again.",
+        code: err.code
+      });
     }
   });
 
