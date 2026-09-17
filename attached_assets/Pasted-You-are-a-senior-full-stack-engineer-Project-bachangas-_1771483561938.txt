@@ -1,0 +1,45 @@
+You are a senior full-stack engineer.
+
+Project: bachangas.com (Admin panel) — “Recent Payments (CCAvenue)” table improvements.
+
+GOAL (2 changes):
+1) Recent Payments table me “Customer Mobile” (phone number) column show karo.
+2) Same table ka data Excel format (XLSX) me download/export ho — with filters/sorting applied.
+
+CURRENT UI (as per screenshot):
+Columns: Transaction ID, Customer, Type, Status, Amount, Fee, Total, Date
+
+ADD:
+- New column: “Mobile”
+- Export button: “Download Excel” (top-right of the table, same card header line)
+
+DATA RULES:
+- “Customer Mobile” resolve karo is priority order me:
+  A) If payment record already has customerPhone/customer_mobile field -> use it
+  B) Else if payment has userId/customerId -> join with Users/Customers table and fetch phone
+  C) Else fallback “—”
+- Show masked number by default in UI: e.g. 98765***** (last 5 visible or last 4 visible — choose consistent)
+- Add “Copy” icon/button to copy full mobile (only for admin role). If role not admin, show masked only.
+
+EXPORT (XLSX):
+- Export file name: bachangas_payments_YYYY-MM-DD.xlsx
+- Columns in Excel (exact order):
+  Date, Transaction ID, Type, Status, Customer Name, Mobile, Amount, Fee, Total
+- Export should include current filters:
+  - date range (if filter exists)
+  - status filter (PAID/FAILED/INITIATED)
+  - search keyword (transaction id/customer/mobile)
+  - sorting (latest first etc.)
+- Export ALL matching rows, not just current page (unless backend is heavy; then stream/paginate server-side).
+
+IMPLEMENTATION DETAILS:
+Backend:
+- Create API route: GET /api/admin/payments/export?from=&to=&status=&q=&sort=
+- Return XLSX file as download (Content-Type for xlsx, Content-Disposition attachment).
+- Use “exceljs” (preferred) OR “xlsx” library.
+- Ensure the export endpoint is protected (admin auth middleware). No public access.
+- If project uses Prisma:
+  - Add select/join to fetch customer mobile.
+  - Optimize query (limit columns, indexes if needed).
+- If payments are stored from CCAvenue callback:
+  - Ensure phone is captur

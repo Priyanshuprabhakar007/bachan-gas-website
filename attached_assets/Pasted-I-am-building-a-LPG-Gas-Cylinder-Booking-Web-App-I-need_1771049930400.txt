@@ -1,0 +1,96 @@
+I am building a LPG Gas Cylinder Booking Web App.
+
+I need the following upgrades:
+
+1) PAYMENT OPTIONS
+In the Checkout modal, add a "Payment Method" section with two radio button options:
+- Cash on Delivery (COD)
+- Pay Online (CCAvenue)
+
+If user selects COD:
+→ Directly place the order
+→ Order status should be "Pending - COD"
+
+If user selects CCAvenue:
+→ Redirect user to CCAvenue payment gateway
+→ On successful payment → mark order as "Paid"
+→ On failure → mark order as "Payment Failed"
+
+Make sure payment method is saved in database with each order.
+
+--------------------------------------------------
+
+2) DELIVERY ADDRESS AUTOFILL
+
+If user has previously saved:
+- Consumer Number
+- Phone Number
+- Delivery Address
+
+Then when user opens checkout again:
+→ Automatically fetch saved data from database
+→ Autofill:
+   - Phone Number
+   - Delivery Address
+   - Consumer Number
+
+If no saved data found:
+→ Show empty fields
+
+When order is placed:
+→ Save/update these details in users table
+
+--------------------------------------------------
+
+3) DATABASE STRUCTURE
+
+Users Table:
+- id (primary key)
+- name
+- phone
+- consumer_number
+- delivery_address
+- created_at
+
+Orders Table:
+- id
+- user_id
+- product_name
+- quantity
+- total_amount
+- payment_method (COD / CCAvenue)
+- payment_status (Pending / Paid / Failed)
+- order_status
+- preferred_date
+- time_slot
+- notes
+- created_at
+
+--------------------------------------------------
+
+4) FRONTEND REQUIREMENTS
+
+- Add Payment Method radio buttons in Checkout modal
+- Prefill saved data automatically on modal open
+- Show total clearly
+- Disable "Place Order" button until required fields filled
+- Clean dark UI styling consistent with existing theme
+
+--------------------------------------------------
+
+5) BACKEND REQUIREMENTS
+
+- Create API:
+   GET /api/user-details
+   POST /api/save-user-details
+   POST /api/create-order
+   POST /api/ccavenue-callback
+
+- Ensure proper validation
+- Handle payment success/failure securely
+
+--------------------------------------------------
+
+Use clean, modular code.
+Do not break existing order history functionality.
+Maintain current UI styling.

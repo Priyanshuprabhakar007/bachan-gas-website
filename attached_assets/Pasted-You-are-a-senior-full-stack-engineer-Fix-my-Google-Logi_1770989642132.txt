@@ -1,0 +1,68 @@
+You are a senior full-stack engineer.
+
+Fix my Google Login (Passport Google OAuth) so that AFTER successful login it always goes to the customer dashboard and does NOT bounce back to the login page.
+
+Tech stack: Node.js + Express + passport-google-oauth20 + express-session + dotenv
+Target: Replit (https, behind proxy)
+
+Must implement:
+1) Correct middleware order (critical):
+- app.set("trust proxy", 1)
+- express-session FIRST
+- passport.initialize() after session
+- passport.session() after initialize
+
+2) Session must persist on Replit:
+- cookie.sameSite = "lax"
+- cookie.httpOnly = true
+- cookie.secure = true when in production/https (Replit)
+- resave=false, saveUninitialized=false
+
+3) Google OAuth routes:
+GET /login  -> show login page
+GET /auth/google -> start oauth (scopes: profile, email)
+GET /auth/google/callback
+- on success: redirect to /customer (dashboard)
+- on failure: redirect to /login
+
+4) Auth guard middleware:
+function ensureAuth(req,res,next){
+  if(req.isAuthenticated && req.isAuthenticated()) return next();
+  return res.redirect("/login");
+}
+Use it for GET /customer
+
+5) Passport strategy:
+- Use GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL from env
+- serializeUser stores minimal user id/email in session
+- deserializeUser restores user from in-memory store (or simple map)
+- store user object with: googleId, name, email, photo
+
+6) Create pages:
+- views/login.html with “Continue with Google” button to /auth/google
+- views/customer.html dashboard showing name/email/photo + logout
+- GET /logout destroys session, calls req.logout, redirects /login
+
+7) Add strong debug logging (temporarily):
+- log when callback hits
+- log req.user on /customer
+- log session id
+- log when ensureAuth blocks
+
+8) Common misconfig protections:
+- Validate env variables on startup; if missing, throw error with clear message
+- Print exact callback URL to console
+- Print instructions for Google Cloud Console:
+  Authorized JavaScript origins = https://<replit-domain>
+  Authorized redirect URI = https://<replit-domain>/auth/google/callback
+
+9) Provide final working files:
+- server.js
+- .env.example
+- views/login.html
+- views/customer.html
+
+IMPORTANT:
+- Do not hardcode secrets in code
+- Must work on Replit without modifications other than setting env vars
+- Redirect must always end at /customer when authenticated

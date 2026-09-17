@@ -1,0 +1,92 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bachan Gas Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            font-size: 16px; 
+            -webkit-font-smoothing: antialiased;
+            background-color: #0B1526;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Refined Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0B1526; }
+        ::-webkit-scrollbar-thumb { background: #F57E20; border-radius: 3px; }
+
+        /* Custom Animation Keyframes */
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes softPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .animate-pop {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .animate-soft-pulse {
+            animation: softPulse 2s ease-in-out infinite;
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #thermal-receipt-print-zone, #thermal-receipt-print-zone * { visibility: visible; }
+            #thermal-receipt-print-zone { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+            @page { margin: 0; size: auto; }
+        }
+
+        ::selection {
+            background-color: #F57E20;
+            color: white;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "express": "https://esm.sh/express@^5.2.1",
+    "cors": "https://esm.sh/cors@^2.8.6",
+    "path": "https://esm.sh/path@^0.12.7",
+    "jsonwebtoken": "https://esm.sh/jsonwebtoken@^9.0.3",
+    "crypto": "https://esm.sh/crypto@^1.0.1",
+    "querystring": "https://esm.sh/querystring@^0.2.1",
+    "@prisma/client": "https://esm.sh/@prisma/client@^7.3.0",
+    "bcrypt": "https://esm.sh/bcrypt@^6.0.0",
+    "fs/": "https://esm.sh/fs@^0.0.1-security/",
+    "multer": "https://esm.sh/multer@^2.0.2",
+    "sharp": "https://esm.sh/sharp@^0.34.5"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#0B1526] text-slate-200">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

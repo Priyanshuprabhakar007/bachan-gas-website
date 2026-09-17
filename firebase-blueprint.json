@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Customer, delivery staff, or admin user profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "address": { "type": "string" },
+        "consumerId": { "type": "string" },
+        "customerType": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "role"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "LPG cylinder or accessory booking order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "number" },
+        "customerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "addressLine": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "totalAmount": { "type": "string" },
+        "totalPaise": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "customerName", "phone", "totalAmount"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "Line items for an order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "orderId": { "type": "number" },
+        "productId": { "type": "number" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" }
+      },
+      "required": ["orderId", "productId", "quantity", "unitPrice"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Gas cylinder or accessory catalog item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "cylinderType": { "type": "string" },
+        "weightKg": { "type": "string" },
+        "inStock": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "categoryId": { "type": "number" }
+      },
+      "required": ["name", "price"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "Persistent express user sessions",
+      "type": "object",
+      "properties": {
+        "sid": { "type": "string" },
+        "sess": { "type": "object" },
+        "expire": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sid", "sess"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles including customers and staff"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Gas cylinder bookings and delivery orders"
+    },
+    "/orderItems/{orderItemId}": {
+      "schema": "OrderItem",
+      "description": "Ordered line items"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "LPG catalog items and accessories"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "Session",
+      "description": "Persisted express sessions"
+    }
+  }
+}

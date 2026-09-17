@@ -1,0 +1,247 @@
+You are a senior full-stack engineer.
+
+Extend the existing “Bachan Gas” system (Next.js App Router + Tailwind + Next API Routes + SQLite + Prisma + RBAC roles) with:
+
+1) GODOWN PICKUP APPROVAL WORKFLOW (Delivery Man → Gatekeeper → Delivery Trip)
+2) DELIVERY TRIP WORKFLOW (Stops, arrival notification, drop/collect, payments)
+3) DIGITAL RECEIPT SYSTEM (Website + WhatsApp + PDF + QR)
+4) ADMIN REPORTING: DAILY VEHICLE / GODOWN RETURN SUMMARY (date-wise audit)
+
+Must run on Replit one-click with SQLite + Prisma migrations + seed.
+
+=====================================================
+A) GODOWN PICKUP APPROVAL (DELIVERY MAN → GATEKEEPER)
+=====================================================
+FLOW (MUST):
+1) Delivery Man logs in → “Godown Pickup” module.
+2) He selects:
+   - Vehicle (vehicle number / type)
+   - Vehicle Owner Name (required field; can be tied to Vehicle record)
+   - Cylinder categories/products (dynamic from DB)
+   - Quantity per product
+3) He clicks “Send Request”.
+4) Gatekeeper receives request in Gatekeeper Inbox.
+5) Gatekeeper physically checks vehicle loading/capacity and verifies actual loaded count.
+6) Gatekeeper Approves/Rejects with remarks.
+7) On Approve:
+   - Approved quantities become official “Issued to Trip”
+   - StockMovement recorded (ISSUE)
+   - Trip Draft auto-created
+8) Delivery Man sees “Approved → Start Trip” interface.
+
+IMPORTANT:
+- Delivery man cannot start trip without gatekeeper approval.
+- Gatekeeper approval screen must include “Qty Approved” for each item.
+
+=====================================================
+B) DELIVERY TRIP + GODOWN RETURN (END-OF-TRIP RETURN)
+=====================================================
+Trip lifecycle:
+- DRAFT (approved pickup, not started)
+- ACTIVE (started)
+- COMPLETED (ended + return submitted)
+- CLOSED (gatekeeper verified return)
+
+NEW REQUIREMENT: RETURN TO GODOWN (MUST)
+When delivery man finishes deliveries and ends trip, he must also submit “Return to Godown” details:
+- Remaining full cylinders returned to godown (by product qty)
+- Empty cylinders returned to godown (by product qty)
+- Optional: damaged/leak/other exception counts
+- Notes + optional photo proof
+
+FLOW:
+1) Delivery man taps “End Trip”
+   - System generates trip summary popup (sales + money + delivered/empties)
+2) Then system shows “Return to Godown” screen:
+   - Pre-filled remaining stock based on issued - delivered
+   - Delivery man confirms and submits return quantities
+3) Gatekeeper receives “Return Verification” request:
+   - Gatekeeper checks returned stock physically
+   - Gatekeeper confirms/adjusts return quantities
+   - On confirmation: StockMovement recorded (RETURN) and Trip becomes CLOSED
+
+NOTE:
+- Admin must be able to configure whether “Return Verification” is mandatory.
+- Default: mandatory (trip not finalized until gatekeeper verifies return).
+
+=====================================================
+C) ADMIN CONTROLS: WHO IS GATEKEEPER
+=====================================================
+Admin must be able to decide who is gatekeeper and change anytime:
+- Staff & Roles module
+- Assign/Unassign GATE_KEEPER role to any staff user
+- Gatekeeper routes accessible only to role GATE_KEEPER and active users
+
+=====================================================
+D) RECEIPTS (WEBSITE + WHATSAPP + QR + DELIVERED/RETURNED COUNTS)
+=====================================================
+On every paid delivery stop, generate receipt (PDF + QR), store on website, send on WhatsApp.
+Receipt must include:
+- Delivered qty
+- Empty returned qty (collected from customer)
+- Empty due if any
+- Payment details and reference
+- QR linking to receipt verification page
+
+=====================================================
+E) ADMIN REPORTING: DATE-WISE VEHICLE TRIP AUDIT (MUST)
+=====================================================
+Add an “Admin Reports” section that answers questions like:
+“On 13 February (2026-02-13), how many vehicles went on trip, vehicle owner name, issued cylinders, and returned cylinders back to godown?”
+
+ADMIN REPORTS REQUIREMENTS:
+1) Daily Trips Summary Report (date filter)
+- Show for a selected date (default today):
+  - Total trips started
+  - Total trips completed
+  - Total trips closed (return verified)
+  - List/table of each trip with:
+    - Trip ID
+    - Date (start/end)
+    - Vehicle number
+    - Vehicle owner name
+    - Delivery man name
+    - Total cylinders issued (sum of all items)
+    - Total delivered to customers
+    - Total empties collected from customers
+    - Total full cylinders returned to godown
+    - Total empties returned to godown
+    - Remaining discrepancy (if any)
+    - Total money collected (by payment method)
+    - Gatekeeper approval name
+    - Gatekeeper return verification name
+2) Drilldown Trip Detail Report
+- Click any trip to view:
+  - Pickup request items (requested vs approved)
+  - Stop-by-stop deliveries
+  - Payments and receipts
+  - Return submission and gatekeeper verification
+  - Stock movements audit log
+
+3) Export
+- Export Daily Trips Report to CSV
+- Export individual trip detail to PDF (optional)
+
+IMPORTANT: Date handling
+- Use local timezone (Asia/Kolkata) for date-based reporting.
+- Reports should support date range filters too (from-to).
+
+=====================================================
+F) DATABASE UPDATES (PRISMA MODELS)
+=====================================================
+Extend/add these fields/models:
+
+Vehicle:
+- id, number(unique), type, ownerName(required), ownerPhone(optional), isActive
+
+PickupRequest:
+- id, deliveryManId, vehicleId,
+- status(PENDING/APPROVED/REJECTED),
+- gatekeeperId(nullable),
+- createdAt, decidedAt,
+- vehicleChecked(bool), safetyOk(bool), gatekeeperNote
+
+PickupRequestItem:
+- id, pickupRequestId, productId, qtyRequested, qtyApproved
+
+Trip:
+- id, pickupRequestId, deliveryManId, vehicleId,
+- status(DRAFT/ACTIVE/COMPLETED/CLOSED/CANCELLED),
+- startTime, endTime,
+- endTripSummaryJson (money + counts snapshot),
+- note
+
+TripInventoryIssued:
+- id, tripId, productId, qtyIssued
+
+TripStop:
+- id, tripId, orderId, customerId,
+- status(PENDING/ARRIVED/DELIVERED/FAILED/SKIPPED),
+- arrivedAt, deliveredAt
+
+TripStopDelivery:
+- id, tripStopId, productId,
+- qtyDelivered, qtyEmptiesReturned, emptyDue
+
+TripStopPayment:
+- id, tripStopId, method, amount, status, referenceNo, bankName
+
+TripReturnRequest:
+- id, tripId,
+- status(PENDING_VERIFY/VERIFIED/REJECTED),
+- submittedByDeliveryManId,
+- verifiedByGatekeeperId(nullable),
+- submittedAt, verifiedAt,
+- deliveryManNote, gatekeeperNote
+
+TripReturnItem:
+- id, tripReturnRequestId, productId,
+- qtyFullReturned,
+- qtyEmptyReturned,
+- qtyDamaged(optional)
+
+StockMovement:
+- id, type(ISSUE/RETURN/ADJUST),
+- productId, qty,
+- tripId(optional),
+- pickupRequestId(optional),
+- tripReturnRequestId(optional),
+- createdByUserId, createdAt
+
+Receipt / WhatsAppMessageLog / Notification (as previously defined)
+
+=====================================================
+G) ADMIN UI (REPORTING)
+=====================================================
+Add /admin/reports page:
+- Date picker (single date) + range filter
+- Summary tiles (Trips, Vehicles, Issued, Returned, Discrepancies)
+- Table:
+  Columns:
+  Date | Vehicle No | Owner Name | Delivery Man | Issued | Delivered | Empties Collected | Full Returned | Empty Returned | Money Collected | Status
+- Clicking a row opens trip detail view.
+
+Also include an “Inventory Discrepancy” indicator:
+- discrepancy = issued - delivered - fullReturnedToGodown (by product and total)
+- empties discrepancy tracked similarly if required
+
+=====================================================
+H) API ROUTES (ADD/UPDATE)
+=====================================================
+Delivery:
+- POST /api/delivery/pickup-requests
+- GET  /api/delivery/pickup-requests
+- POST /api/delivery/trip/start
+- POST /api/delivery/trip/end (generates endTripSummaryJson)
+- POST /api/delivery/trip/return (submit return to godown)
+
+Gatekeeper:
+- GET  /api/gatekeeper/pickup-requests?status=PENDING
+- POST /api/gatekeeper/pickup-requests/[id]/approve
+- POST /api/gatekeeper/pickup-requests/[id]/reject
+- GET  /api/gatekeeper/returns?status=PENDING_VERIFY
+- POST /api/gatekeeper/returns/[id]/verify (confirm returned quantities)
+
+Admin Reports:
+- GET /api/admin/reports/daily-trips?date=YYYY-MM-DD
+- GET /api/admin/reports/daily-trips?from=YYYY-MM-DD&to=YYYY-MM-DD
+- GET /api/admin/reports/trips/[id] (detail)
+- GET /api/admin/reports/daily-trips/export.csv?date=YYYY-MM-DD
+
+All routes must enforce RBAC permissions.
+
+=====================================================
+DELIVERABLE
+=====================================================
+- Complete flow:
+  Pickup request → gatekeeper approve → trip start → deliveries + receipts → trip end → return to godown submission → gatekeeper verifies return → admin daily report shows:
+  “On 13 Feb (2026-02-13), which vehicles went, owner names, issued vs returned totals”.
+- Seed data:
+  - at least 2 vehicles with owner names
+  - 1 admin, 1 gatekeeper, 1 delivery man
+  - sample pickup + trip + return + receipts for demo reporting
+- README:
+  - how to run
+  - how to change gatekeeper role
+  - how to use reports and export
+- No pseudo-code. Production-like UI + working backend.

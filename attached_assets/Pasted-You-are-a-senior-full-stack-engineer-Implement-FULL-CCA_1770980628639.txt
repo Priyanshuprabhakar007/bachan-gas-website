@@ -1,0 +1,200 @@
+You are a senior full-stack engineer.
+
+Implement FULL CCAvenue payment gateway integration in the existing “Bachan Gas Service” Next.js (App Router) + Tailwind + Next API Routes + SQLite + Prisma system.
+
+GOAL:
+- Customers can pay via CCAvenue for orders/receipts.
+- System automatically adds a configurable “CCAvenue Convenience Fee” (default 0.25%) to the payable amount BEFORE redirecting to CCAvenue.
+- Admin can enable/disable CCAvenue and enable/disable the convenience fee using toggle switches in Admin Settings, and can change the fee percentage.
+
+Must run on Replit one-click. Use env vars for secrets.
+
+=====================================================
+A) CCAvenue PAYMENT FLOW (MUST)
+=====================================================
+Implement the standard CCAvenue hosted checkout redirect flow:
+
+1) Customer chooses payment method = CCAvenue on Payment screen.
+2) Backend creates a PaymentIntent/Transaction record with:
+   - baseAmount (order amount)
+   - convenienceFeeAmount (if enabled)
+   - totalPayableAmount = baseAmount + convenienceFeeAmount
+3) Backend generates encrypted request payload (per CCAvenue requirements) and returns a redirect URL or auto-post form.
+4) Frontend redirects/posts to CCAvenue payment page.
+5) CCAvenue redirects back to:
+   - success URL (/payment/ccavenue/success)
+   - failure URL (/payment/ccavenue/failure)
+6) Backend verifies and decrypts the CCAvenue response.
+7) Mark transaction as PAID or FAILED and update order/receipt status.
+8) On success:
+   - generate receipt PDF + QR
+   - send receipt on WhatsApp automatically
+   - show “Payment Successful” page with receipt link
+
+=====================================================
+B) CONVENIENCE FEE (DEFAULT 0.25%) (MUST)
+=====================================================
+Requirement:
+- When payment method is CCAvenue, add a convenience fee of 0.25% (default) on base amount.
+
+Example:
+- Base amount = 2525
+- Fee rate = 0.25% = 0.0025
+- convenienceFeeAmount = 2525 * 0.0025 = 6.3125
+- Round policy:
+  - Round to 2 decimals for currency, then final payable rounded to 2 decimals
+  - Or round up to nearest rupee (Admin configurable) — pick one and document it.
+- totalPayableAmount = 2525 + 6.31 = 2531.31 (example)
+
+IMPORTANT UI:
+- Before redirecting to CCAvenue, show breakdown:
+  - Amount: ₹2525.00
+  - CCAvenue Convenience Fee (0.25%): ₹6.31
+  - Total Payable: ₹2531.31
+
+=====================================================
+C) ADMIN SETTINGS TOGGLES (MUST)
+=====================================================
+Add /admin/settings/payments with toggles and fields:
+
+1) Enable CCAvenue Payments (toggle)
+- If OFF:
+  - Hide CCAvenue option from customer/delivery payment screens
+  - Block /api/payments/ccavenue/initiate calls
+
+2) Enable CCAvenue Convenience Fee (toggle)
+- If OFF:
+  - totalPayableAmount = baseAmount (no extra charge)
+  - Still allow CCAvenue payment
+
+3) Convenience Fee Percentage (number input)
+- Default: 0.25
+- Range validation: 0 to 5 (or sensible max)
+- Stored in DB
+
+4) Rounding Mode (dropdown)
+- "ROUND_2_DECIMALS" (default)
+- "ROUND_UP_TO_RUPEE" (optional)
+
+Admin can change these anytime; frontend must reflect instantly.
+
+=====================================================
+D) DATABASE (PRISMA MODELS) (MUST)
+=====================================================
+Add/update models:
+
+PaymentSettings (single row or part of SiteSettings):
+Option A: Extend SiteSettings:
+- ccavenueEnabled (bool default true)
+- ccavenueFeeEnabled (bool default true)
+- ccavenueFeePercent (decimal default 0.25)
+- ccavenueRoundingMode (string default "ROUND_2_DECIMALS")
+
+PaymentTransaction:
+- id
+- orderId or tripStopId or receiptId (choose one consistent linkage; receipt recommended)
+- gateway (PAYTM/CCAVENUE/CASH/RTGS_CHEQUE)
+- baseAmount
+- convenienceFeeAmount
+- totalAmount
+- currency ("INR")
+- status (INITIATED/PAID/FAILED)
+- gatewayOrderId / merchantTxnId (unique)
+- gatewayReference (nullable)
+- requestPayloadJson (optional)
+- responsePayloadJson (optional)
+- createdAt, updatedAt
+
+Receipt:
+- must store:
+  - baseAmount
+  - convenienceFeeAmount (if any)
+  - totalAmount
+  - paymentMethod
+  - paymentReference
+  - show fee line item clearly on receipt when enabled
+
+AdminAuditLog:
+- log settings changes (who changed fee/enable toggles).
+
+=====================================================
+E) API ROUTES (MUST)
+=====================================================
+Public/Auth (Customer/Delivery):
+- GET /api/settings/payments
+  - returns ccavenueEnabled, feeEnabled, feePercent, roundingMode
+
+CCAvenue:
+- POST /api/payments/ccavenue/initiate
+  Input:
+  - receiptId (or orderId/tripStopId)
+  Output:
+  - redirectUrl OR auto-post form data required by CCAvenue
+  Behavior:
+  - verify ccavenueEnabled
+  - compute convenience fee if enabled
+  - create PaymentTransaction(status=INITIATED)
+  - generate encrypted request and return
+
+- POST /api/payments/ccavenue/callback
+  - called by CCAvenue redirect response (working with success/failure)
+  - decrypt response
+  - verify amount matches PaymentTransaction.totalAmount
+  - mark PAID/FAILED
+  - on PAID: generate receipt, WhatsApp send
+
+Pages:
+- /payment/ccavenue/success (shows success UI, fetches receipt)
+- /payment/ccavenue/failure (shows failure UI, retry button)
+
+Admin:
+- GET /api/admin/settings/payments
+- PATCH /api/admin/settings/payments (toggle + percent + rounding)
+- GET /api/admin/transactions (filter by gateway/status/date)
+
+All routes RBAC protected where needed.
+
+=====================================================
+F) SECURITY + VALIDATION (MUST)
+=====================================================
+- Use CCAvenue working key and access code from env vars:
+  - CCAVENUE_MERCHANT_ID
+  - CCAVENUE_ACCESS_CODE
+  - CCAVENUE_WORKING_KEY
+  - CCAVENUE_REDIRECT_URL
+  - CCAVENUE_CANCEL_URL
+- Never expose working key in frontend.
+- Validate that callback amount equals totalAmount stored.
+- Store full response for auditing.
+- Idempotency: callback can be retried safely.
+
+=====================================================
+G) UI INTEGRATION (MUST)
+=====================================================
+Wherever payment method selection exists (delivery flow or checkout):
+- Show CCAvenue option only if ccavenueEnabled is true.
+- If selected:
+  - show fee breakdown based on current admin fee settings
+  - show “Proceed to Pay” button that calls /api/payments/ccavenue/initiate
+
+Receipt UI:
+- If convenience fee applied, show it as a separate line item.
+- WhatsApp receipt message should show total payable and mention fee if applied (optional):
+  “Amount: ₹2525 + Fee ₹6.31 = ₹2531.31”
+
+=====================================================
+H) DELIVERABLE
+=====================================================
+- Working CCAvenue payment integration end-to-end:
+  initiate → redirect → callback verify → mark paid → receipt + WhatsApp
+- Convenience fee 0.25% applied by default and shown clearly before payment + on receipt
+- Admin toggles:
+  - Enable/Disable CCAvenue
+  - Enable/Disable Convenience Fee
+  - Change fee percentage
+  - Choose rounding mode
+- Runs on Replit one-click with Prisma migrate + seed
+- README includes:
+  - how to set CCAvenue env vars
+  - testing approach (sandbox vs live)
+  - fee calculation + rounding rules

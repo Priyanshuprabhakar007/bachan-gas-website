@@ -1,0 +1,134 @@
+You are a senior Next.js (App Router) + Prisma engineer.
+
+In my “Bachan Gas Service” customer dashboard, when the customer clicks “Book Cylinder” (route: /account/book-refill), the page is blank except the heading. I want this page to open the FULL CATALOGUE (all products available on the website), so the customer can browse everything and place an order.
+
+TECH STACK:
+- Next.js App Router + Tailwind
+- Next.js API Routes
+- SQLite + Prisma
+- Auth + RBAC exists (Customer role)
+- Replit friendly
+
+========================================
+GOAL (MUST)
+========================================
+When customer taps “Book Cylinder”:
+1) Load and display the FULL catalogue (ALL active products) from DB
+2) Products must appear as a grid of cards (premium dark theme)
+3) Provide search + category filters (dynamic categories from DB)
+4) Allow customer to add any product to cart with quantity
+5) Cart summary + total on right (desktop) / bottom drawer (mobile)
+6) Checkout form (phone + address + preferred date/slot) and “Place Order”
+7) Save Order + OrderItems to DB and redirect to /account/orders
+8) Out-of-stock items must be visible but cannot be added
+
+========================================
+UI REQUIREMENTS (MUST)
+========================================
+On /account/book-refill:
+
+A) Header
+- Keep heading (can rename to “Browse Catalogue”)
+- Add subtitle: “Choose products and place your order.”
+
+B) Search + Filters (Top)
+- Search input: “Search products…”
+- Category filter dropdown (All Categories + dynamic categories)
+- Sort dropdown (Newest, Price Low→High, Price High→Low)
+
+C) Catalogue Grid (Main)
+- Fetch products from DB, show as cards:
+  - Product image (primaryImageUrl)
+  - Title
+  - Category badge
+  - Stock badge (In Stock / Out of Stock)
+  - Price
+  - Qty controls:
+    [-] [qty] [+]
+  - If out of stock: disable qty controls
+
+D) Cart Panel
+- Shows selected items (qty > 0):
+  - item title
+  - qty adjust
+  - remove
+  - line total
+- Summary:
+  - Subtotal
+  - Delivery charge (default 0)
+  - Total
+- “Proceed to Checkout” button
+
+E) Checkout Modal / Section
+- Phone (prefill)
+- Address (prefill)
+- Preferred Delivery Date
+- Time Slot: Morning / Afternoon / Evening
+- Notes (optional)
+- “Place Order” button
+- After success:
+  - toast “Order placed successfully”
+  - redirect /account/orders
+
+========================================
+BACKEND / DATABASE (MUST)
+========================================
+Use Prisma models:
+
+Product:
+- id, title, categoryId, price, inStock, stockCount, primaryImageUrl, isActive
+
+Category:
+- id, name, slug, sortOrder, isActive
+
+Order:
+- id, userId, status, subtotalAmount, deliveryCharge, totalAmount,
+  phone, address, preferredDate, preferredSlot, notes, createdAt
+
+OrderItem:
+- id, orderId, productId, qty, unitPrice, lineTotal
+
+Seed sample products across categories if DB is empty.
+
+========================================
+API ROUTES (MUST)
+========================================
+1) GET /api/customer/catalog-products
+Query:
+- search=
+- categorySlug=
+- sort=
+- take/skip (optional)
+Return:
+- all active products with category data
+
+2) GET /api/categories (or /api/customer/categories)
+- return all active categories for filter dropdown
+
+3) POST /api/customer/orders
+Body:
+- items: [{productId, qty}]
+- phone, address, preferredDate, preferredSlot, notes
+Server:
+- validate stock
+- compute totals server-side
+- create Order + OrderItems
+- (optional) decrement stockCount immediately
+
+========================================
+INTEGRATION DETAILS (MUST)
+========================================
+- Replace the current blank /account/book-refill page with this catalogue UI
+- Use client component with loading skeleton
+- Debounced search (300ms)
+- Handle errors with toast
+- Update sidebar active highlight for “Book Cylinder”
+- Keep dark theme styling consistent with dashboard
+
+========================================
+DELIVERABLE
+========================================
+- Clicking “Book Cylinder” opens full catalogue with all website products
+- Customer can search/filter, add items to cart, checkout, and place an order
+- Order is stored and visible in Order History
+- Works on Replit with Prisma migrate + seed

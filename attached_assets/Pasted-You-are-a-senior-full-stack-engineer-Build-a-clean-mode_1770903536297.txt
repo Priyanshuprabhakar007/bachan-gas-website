@@ -1,0 +1,176 @@
+You are a senior full-stack engineer.
+
+Build a clean, modern “Bachan Gas” cylinder booking website with a homepage product catalog UI like the reference image:
+- Big title: “MASTER CATALOG”
+- Subtitle: “VERIFIED INDANE DISTRIBUTION ASSETS”
+- Category tabs (pill style): All Models, Domestic, Commercial, Safety Parts (BUT categories must be dynamic/editable from admin)
+- A responsive product grid with clean cards (image, small tags like “IN STOCK”, product title, and a “VIEW DETAILS” button)
+- Use soft shadows, rounded corners, lots of whitespace, premium modern look.
+
+TECH STACK (Replit friendly):
+- Frontend: Next.js (App Router) + TailwindCSS
+- Backend: Next.js API routes (keep it simplest)
+- Database: SQLite with Prisma (store users, products, categories, orders)
+- Authentication: email + password (simple)
+  When user clicks “Login” in navbar, show a modal popup:
+   1) Step 1: “Choose Account Type” with two big buttons:
+      - Domestic Customer
+      - Commercial Customer
+   2) After choosing, show Login/Register form inside same modal.
+   3) Store selected accountType in user profile and session.
+   4) After login redirect to dashboard based on type:
+      - /domestic/dashboard
+      - /commercial/dashboard
+
+IMPORTANT: FULL ADMIN BACKEND REQUIRED
+Admin must be able to change EVERYTHING from the panel:
+- Add/Edit/Delete cylinders (products)
+- Change cylinder name, price, weight, category, description, image, stock, and visibility
+- Create / Rename / Reorder / Delete categories (dynamic tabs)
+- Move cylinders between categories
+- Add NEW categories like “New Launch”, “Offers”, “Accessories” etc anytime
+- If a category is deleted:
+  - Prompt: “Move products to another category” OR “Set to Uncategorized”
+- Category rename must instantly reflect on homepage tabs without code changes
+- Ability to mark a category as “Show on Home Tabs = Yes/No”
+- Ability to set category icon (optional) or simple emoji to show on tab
+
+PAGES / ROUTES:
+1) Home (/)
+   - Header with logo text “Bachan Gas” (left)
+   - Nav: Home, Products, Safety, Contact, Login (right)
+   - Catalog section exactly like reference:
+     - Tabs must load from DB (dynamic categories)
+     - “All Models” should be a virtual tab (shows all active products)
+     - “View All” button on right (goes to /products)
+   - Product cards pulled from DB:
+     - show “IN STOCK” or “OUT OF STOCK”
+     - show price and weight (optional small text)
+   - Clicking category tab filters products instantly (client side filter or server query)
+   - Clicking “View Details” opens /product/[id]
+
+2) Products Listing (/products)
+   - Same catalog grid but with:
+     - Search (by name)
+     - Sort (price low-high, high-low, newest)
+     - Filter by category
+
+3) Product Details (/product/[id])
+   - Big product image
+   - Price (real from DB)
+   - Stock status
+   - Quantity selector
+   - “Book Cylinder” button
+
+4) Booking / Checkout
+   - Domestic flow: address + phone + preferred delivery date
+   - Commercial flow: business name + GST (optional) + delivery address + quantity
+   - Save order to DB with status: Pending, Confirmed, Delivered
+
+5) Dashboards
+   - Domestic dashboard: order history + profile
+   - Commercial dashboard: bulk orders + invoice download placeholder
+
+ADMIN PANEL (ROLE PROTECTED)
+- /admin (only admin role can access)
+Admin features MUST include:
+
+A) Category Manager
+- List all categories
+- Create category: name, slug(auto), display order, showOnHomeTabs (bool), icon/emoji (optional)
+- Rename category
+- Delete category (with safe reassignment of products)
+- Reorder categories (drag & drop or up/down)
+- Toggle show/hide on home tabs
+- Categories are used for the homepage pills/tabs and product grouping.
+
+B) Cylinder / Product Manager
+- Add new cylinder/product with:
+  - Title (e.g., 14.2KG Domestic Refill)
+  - Category (select from dynamic categories)
+  - Weight (e.g., 14.2)
+  - Unit (KG)
+  - Price (number)
+  - InStock (bool) + StockCount (optional)
+  - Image upload OR image URL
+  - Description
+  - SKU/Code (optional)
+  - Active/Visible toggle (hide product without deleting)
+- Edit any product field
+- Delete product
+- Bulk update: mark in stock/out of stock, change category, update price
+
+C) Order Manager
+- View orders
+- Update order status: Pending / Confirmed / Delivered / Cancelled
+- Basic customer details view
+
+SEED / DEFAULT DATA
+Seed initial categories and products into DB on first run:
+- Categories:
+  - Domestic
+  - Commercial
+  - Safety Parts
+- Products:
+  Domestic:
+    - 14.2KG Domestic Refill (in stock, price placeholder like 950)
+    - 5KG FTL Domestic (in stock, price placeholder like 550)
+  Commercial:
+    - 19KG Commercial Refill (in stock, price placeholder like 1850)
+    - 47.5KG Industrial Refill (in stock, price placeholder like 3900)
+  Safety Parts:
+    - Regulator
+    - Hose Pipe
+    - Gas Lighter
+
+DATABASE (Prisma Models)
+- User:
+  id, name, email(unique), passwordHash, accountType (DOMESTIC/COMMERCIAL), role (USER/ADMIN), createdAt
+- Category:
+  id, name, slug(unique), icon(optional), showOnHomeTabs(bool), sortOrder(int), createdAt
+- Product:
+  id, title, slug(unique), categoryId(FK), weight(optional), unit(optional),
+  price, inStock(bool), stockCount(optional), imageUrl, description, isActive(bool), createdAt, updatedAt
+- Order:
+  id, userId, productId, qty, amount, address fields, business fields (nullable),
+  status, createdAt
+
+API ROUTES (must be implemented)
+Public:
+- GET /api/categories (only showOnHomeTabs + active)
+- GET /api/products?category=slug&search=&sort=
+- GET /api/product/[id]
+Auth:
+- POST /api/auth/register
+- POST /api/auth/login
+- POST /api/auth/logout
+Admin (protected):
+- CRUD /api/admin/categories (create, update, reorder, delete)
+- CRUD /api/admin/products (create, update, delete, bulk update)
+- GET /api/admin/orders + PATCH status
+
+UI REQUIREMENTS:
+- Must look like the reference: pill tabs, large bold headings, modern card shadows, rounded corners.
+- Product card:
+  - Top image area
+  - Small line with category + “IN STOCK”
+  - Large bold title
+  - Dark button “VIEW DETAILS”
+- Fully responsive (mobile: 1 column, tablet: 2 columns, desktop: 4 columns)
+
+FUNCTIONAL REQUIREMENTS:
+- Tabs are dynamic from DB (category manager controls them)
+- Tabs filter instantly
+- Product details page works
+- Login modal with Domestic/Commercial choice works
+- Register + login works
+- Book order saves to DB
+- Admin can change product name, price, image, stock, category anytime
+- Admin can add/remove/rename/reorder categories
+- Seed initial products automatically
+
+DELIVERABLE:
+- A running app on Replit with one-click run.
+- Include README with setup + default admin credentials.
+- Use environment variables for secrets.
+- No placeholder UI: must be polished and production-like.

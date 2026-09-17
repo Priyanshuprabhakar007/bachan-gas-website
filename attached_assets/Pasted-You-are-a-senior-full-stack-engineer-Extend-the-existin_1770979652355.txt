@@ -1,0 +1,172 @@
+You are a senior full-stack engineer.
+
+Extend the existing Next.js (App Router) + Tailwind website to add a fully functional “Contact Us” section/page, ensure it appears in the navbar, AND add Admin-controlled “Website Branding” so Admin can change:
+- Website Name only
+- Logo only
+- OR both Name + Logo
+without code changes.
+
+DEFAULT WEBSITE NAME (MUST):
+- The default site/brand name must be: “Bachan Gas Service”
+- Seed SiteSettings.siteName = “Bachan Gas Service”
+- All UI should display “Bachan Gas Service” by default until admin changes it.
+
+========================================
+A) NAVBAR UPDATE (MUST)
+========================================
+Navbar must use DB-driven branding (NOT hardcoded):
+- Left brand area:
+  - If “Show Logo” is enabled and logo exists → show logo image
+  - If “Show Site Name” is enabled → show siteName text
+  - If both enabled → show logo + siteName together
+  - If only name enabled → show only siteName
+  - If only logo enabled → show only logo
+- Tabs (right): Home, Products, Safety, Contact Us, Login
+- “Contact Us” links to /contact
+
+========================================
+B) CONTACT PAGE (/contact) (MUST)
+========================================
+Premium Contact Us page with:
+
+1) Contact Information Card
+- Business Name: show from settings (siteName) → default “Bachan Gas Service”
+- Show logo at top if enabled
+- Phone/WhatsApp/Email/Address/Working Hours (all editable from admin settings)
+
+2) Contact Form
+Fields:
+- Full Name (required)
+- Phone (required)
+- Email (optional)
+- Message (required)
+- Inquiry Type dropdown: Domestic / Commercial / Safety Parts / Complaint / Other
+
+Behavior:
+- Save inquiry to DB
+- Show success toast
+- Create Admin notification
+- Add spam protection: rate limit by IP + honeypot field
+
+3) Map Section
+- Google Maps iframe (admin-editable embed URL)
+- Hide if empty
+
+========================================
+C) HOME PAGE CONTACT SECTION (OPTIONAL)
+========================================
+Add /#contact near footer with:
+- Call Now (tel:)
+- WhatsApp Now (wa.me)
+- Address + hours
+- Button to /contact
+Show site name/logo using settings.
+
+========================================
+D) ADMIN SETTINGS (MUST) — BRANDING + CONTACT
+========================================
+Create /admin/settings with two sections:
+
+1) Branding (NEW, MUST)
+Admin can update:
+- siteName (string) (default: “Bachan Gas Service”)
+- logoUrl (string) OR logoUpload (preferred)
+- showLogo (boolean)
+- showSiteName (boolean)
+- tagline (optional)
+
+Rules:
+- Admin can choose:
+  a) Name only: showSiteName=true, showLogo=false
+  b) Logo only: showSiteName=false, showLogo=true
+  c) Both: showSiteName=true, showLogo=true
+
+UI must include toggles:
+- “Show Logo”
+- “Show Site Name”
+Plus a live preview card showing how navbar branding will look.
+
+Logo handling:
+- Upload logo file (drag/drop) OR paste logo URL
+- Preview
+- Replace/remove
+- Validate image type (png/jpg/webp) and max size
+
+2) Contact Details
+- phone, whatsapp, email, address, workingHours, googleMapsEmbedUrl, supportMessageTemplate(optional)
+
+These settings must instantly reflect across:
+- Navbar brand area
+- Footer
+- Contact page
+- (Optional) Site metadata title/favicon if implemented
+
+========================================
+E) STORAGE (Replit-friendly)
+========================================
+For logo uploads use StorageService:
+- Recommended: Cloudflare R2 / S3-compatible via env vars
+- Fallback: local /public/uploads
+Document setup in README.
+
+========================================
+F) DATABASE (PRISMA MODELS)
+========================================
+SiteSettings (single row):
+- id
+- siteName (default “Bachan Gas Service”)
+- tagline (nullable)
+- logoUrl (nullable)
+- showLogo (bool default true)
+- showSiteName (bool default true)
+- phone
+- whatsapp
+- email
+- address
+- workingHours
+- googleMapsEmbedUrl
+- supportMessageTemplate (nullable)
+- updatedAt
+
+ContactInquiry:
+- id, name, phone, email(nullable), inquiryType, message, createdAt, status(NEW/IN_PROGRESS/CLOSED)
+
+Notification:
+- reuse existing, create admin notification on new inquiry
+
+Seed default SiteSettings with siteName = “Bachan Gas Service”.
+
+========================================
+G) API ROUTES (MUST)
+========================================
+Public:
+- GET /api/settings (returns branding + contact fields)
+- POST /api/contact (save inquiry + admin notification)
+
+Admin (RBAC protected):
+- GET /api/admin/settings
+- PATCH /api/admin/settings (update name/logo/toggles/contact)
+- POST /api/admin/upload (logo upload)
+- DELETE /api/admin/upload?key=... (optional)
+- GET /api/admin/inquiries
+- PATCH /api/admin/inquiries/[id]
+
+Rate limiting for POST /api/contact by IP + honeypot.
+
+========================================
+H) UI REQUIREMENTS
+========================================
+- Premium modern design
+- Mobile responsive
+- Branding changes update instantly
+- Admin settings includes toggles + upload + preview + live navbar preview
+
+========================================
+DELIVERABLE
+========================================
+- “Contact Us” tab appears on home navbar
+- /contact page works with form + DB + admin notification
+- Admin can edit contact details
+- NEW: Default website name is “Bachan Gas Service”
+- Admin can change website name only, logo only, or both (with toggles), and the whole site updates instantly
+- Runs on Replit one-click with Prisma migrations + seed

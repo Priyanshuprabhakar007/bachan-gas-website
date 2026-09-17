@@ -1,0 +1,46 @@
+You are a senior full-stack engineer. Fix my production Google OAuth login flow on domain https://bachangas.com.
+
+Current issue:
+After Google sign-in, user lands on:
+https://bachangas.com/auth/google/callback?code=...
+and then API/website shows: {"message":"Unauthorized"}.
+So the OAuth code is coming, but session/JWT is NOT being created or not being sent to protected routes.
+
+Requirements:
+1) Build/patch a Node.js + Express backend (deployable on Replit) that handles Google OAuth correctly.
+2) Use Google OAuth 2.0 Authorization Code flow.
+3) Implement routes:
+   - GET /auth/google  -> redirect to Google consent
+   - GET /auth/google/callback -> exchange code for tokens, fetch profile, create app session (JWT) and set cookie, then redirect to /dashboard
+   - GET /api/me -> returns logged-in user (protected)
+   - POST /auth/logout -> clears cookie
+4) Session method:
+   - Create JWT (userId/email) signed with JWT_SECRET
+   - Set cookie "token" with correct production settings:
+     - httpOnly: true
+     - secure: true (because https)
+     - sameSite: "none" if frontend/backend differ, otherwise "lax"
+     - path: "/"
+5) Add auth middleware only for /api/, NOT for /auth/.
+6) Ensure CORS is correct:
+   - Allow origin https://bachangas.com
+   - Allow credentials true
+7) Provide a simple frontend test page (or instructions) to verify:
+   - login button -> Google sign in
+   - after redirect -> /dashboard shows user email (calls /api/me with credentials)
+8) Add .env variables and use Replit Secrets:
+   - GOOGLE_CLIENT_ID
+   - GOOGLE_CLIENT_SECRET
+   - GOOGLE_REDIRECT_URI = https://bachangas.com/auth/google/callback
+   - JWT_SECRET
+   - BASE_URL = https://bachangas.com
+9) Also provide exact Google Cloud Console settings:
+   - Authorized redirect URI must match EXACTLY: https://bachangas.com/auth/google/callback
+   - Authorized JavaScript origins: https://bachangas.com
+10) Do not use pseudo-code. Create complete working code files:
+   - index.js (or server.js)
+   - package.json
+   - middleware/auth.js
+   - routes/auth.js
+   - routes/api.js
+   - public/dashboard.html

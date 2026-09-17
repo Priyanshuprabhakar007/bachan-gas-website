@@ -1,0 +1,11 @@
+{
+  "name": "Bachan Gas Manager",
+  "description": "A comprehensive gas distribution and inventory management system for domestic and commercial LPG providers, featuring role-based access, CRM, and order tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

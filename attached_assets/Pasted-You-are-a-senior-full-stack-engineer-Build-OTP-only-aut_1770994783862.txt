@@ -1,0 +1,123 @@
+You are a senior full-stack engineer. Build OTP-only authentication using Twilio Verify with a 4-digit code. No other login methods should exist.
+
+STACK (Replit friendly):
+- Next.js 14+ (App Router) + Tailwind
+- Next.js API Routes (Route Handlers)
+- Prisma + SQLite
+- TypeScript
+
+GOAL:
+Users login/register ONLY by phone number + 4-digit OTP via Twilio Verify.
+Flow:
+1) User enters phone number (+91 etc) on /auth
+2) Click "Send OTP" → call Twilio Verify to send a 4-digit code
+3) User enters OTP → verify with Twilio
+4) If verified: create/find user in DB and set auth session (httpOnly cookie with JWT)
+5) Redirect to /account (protected)
+6) IMPORTANT: Do NOT auto-logout. Do NOT log out users unless they explicitly clear browser cookies or admin removes session.
+
+TWILIO:
+Use Twilio Verify (recommended) not custom SMS.
+ENV VARS:
+- TWILIO_ACCOUNT_SID
+- TWILIO_AUTH_TOKEN
+- TWILIO_VERIFY_SERVICE_SID
+- JWT_SECRET
+- APP_URL (e.g. http://localhost:3000)
+
+OTP RULES:
+- OTP UI must be 4 digits (4 separate input boxes).
+- If Twilio Verify service does not support 4 digits in this account, still keep UI 4-digit and pass the code as typed. Show clear error if invalid.
+- Rate limit send: max 3 OTP sends per phone per 10 minutes
+- Rate limit verify: max 5 attempts per phone per 10 minutes
+- Resend cooldown: 30 seconds on UI
+- Validate phone in E.164 format (e.g. +9198xxxxxxx)
+
+DATABASE (Prisma):
+User table:
+- id (cuid)
+- phone (unique)
+- createdAt
+- lastLoginAt
+AuthSession table (persistent sessions):
+- id (cuid)
+- userId (FK)
+- tokenHash (unique)  // store hash of a random session token or JWT jti
+- createdAt
+- lastSeenAt
+- revokedAt (nullable)
+RateLimit table:
+- phone (unique)
+- sendCount
+- verifyCount
+- windowStart
+
+SESSION (NO AUTO LOGOUT):
+Use a persistent httpOnly cookie "session" with MAX AGE = 365 days.
+Two valid approaches (choose one and implement fully):
+A) JWT cookie:
+- JWT expires in 365 days
+- cookie maxAge 365 days
+- middleware validates JWT signature
+B) DB-backed session token (preferred):
+- generate random token, store ONLY hashed token in AuthSession
+- set cookie "session" = raw token (httpOnly, sameSite=lax, secure in prod)
+- cookie maxAge 365 days
+- middleware checks token hash exists and not revoked
+- update lastSeenAt periodically
+
+IMPORTANT:
+- Do NOT implement automatic session expiry like 7/30 days (must be 365 days).
+- Do NOT implement auto logout on inactivity.
+- Logout button/page is OPTIONAL:
+  - If present, keep it small/hidden in settings.
+  - If user never clicks it, session stays.
+
+API ROUTES:
+1) POST /api/auth/send-otp
+Body: { phone: string }
+- validate phone
+- enforce rate limit send
+- call Twilio Verify: verifications.create({to: phone, channel: 'sms'})
+- return { ok: true }
+
+2) POST /api/auth/verify-otp
+Body: { phone: string, code: string }
+- validate phone + code
+- enforce rate limit verify
+- call Twilio Verify: verificationChecks.create({to: phone, code})
+- if approved:
+  - upsert user by phone
+  - create persistent session (AuthSession or JWT)
+  - set cookie (365 days)
+  - return { ok: true }
+
+(OPTIONAL)
+3) POST /api/auth/logout
+- only if you add logout in UI; otherwise skip implementing this endpoint.
+
+AUTH PROTECTION:
+- Protect /account/* in middleware.ts
+- If session cookie invalid → redirect to /auth
+
+UI:
+- /auth page with 2 steps:
+  Step 1 phone + Send OTP
+  Step 2 OTP 4 boxes + Verify + Resend with 30s cooldown
+- /account protected page showing phone number
+- DO NOT automatically log out user.
+- DO NOT show forced logout or session expiry messages.
+
+DELIVERABLES:
+- end-to-end working auth
+- prisma schema + migration
+- .env.example
+- README with setup instructions
+
+DO NOT:
+- Add email/password login
+- Add Google login
+- Store OTP in database (Twilio handles it)
+- Expose secrets to frontend
+
+IMPLEMENT NOW.

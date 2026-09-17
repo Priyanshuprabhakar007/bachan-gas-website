@@ -1,0 +1,148 @@
+You are a senior full-stack engineer.
+
+Extend the existing “Bachan Gas” admin panel (Next.js App Router + Tailwind + Next API Routes + SQLite + Prisma) to support FULL IMAGE MANAGEMENT for BOTH Products and Categories.
+
+GOAL:
+Admin can add/edit/remove images for:
+1) Every Product (cylinder/accessory)
+2) Every Category (tab icon/banner image)
+
+Images must be manageable directly inside the admin UI while editing products/categories.
+
+========================
+A) IMAGE FEATURES (MUST)
+========================
+1) Product Images
+- Each product supports:
+  - Primary Image (required if product is active)
+  - Optional Gallery Images (multiple)
+- Admin can:
+  - Upload image from computer (drag & drop)
+  - OR paste image URL
+  - Preview image instantly
+  - Replace image
+  - Remove image
+  - Reorder gallery images (drag & drop)
+- Frontend should display:
+  - Product card uses primary image
+  - Product detail page shows gallery carousel (if gallery exists)
+
+2) Category Images
+- Each category supports:
+  - Category Icon Image (small square, used on tab/pill optionally)
+  - Category Banner Image (wide, optional, used on /products top header)
+- Admin can:
+  - Upload/replace/remove icon image
+  - Upload/replace/remove banner image
+  - Preview both
+
+========================
+B) STORAGE (Replit-friendly)
+========================
+Use ONE of these storage approaches (choose simplest that works reliably on Replit):
+Option 1 (Recommended): Cloudflare R2 or S3-compatible storage
+- Use environment vars:
+  - S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_BASE_URL
+- Upload via server-side API route with presigned URLs OR direct upload endpoint.
+
+
+Implement abstraction:
+- StorageService with methods:
+  - upload(file) -> { url, key }
+  - delete(key)
+So switching between R2 and local is easy.
+
+========================
+C) ADMIN UI CHANGES (MUST)
+========================
+1) Product Edit Page (/admin/products/[id])
+Add an “Images” section:
+- Primary Image:
+  - Upload button + URL input
+  - Preview box
+  - Remove/Replace buttons
+- Gallery Images:
+  - Upload multiple
+  - Grid preview
+  - Reorder (drag)
+  - Remove individual
+- Save updates into DB.
+
+2) Category Edit Page (/admin/categories/[id])
+Add an “Images” section:
+- Icon Image upload + preview
+- Banner Image upload + preview
+- Remove/Replace
+- Save updates into DB.
+
+3) Image Validation
+- Accept JPG/PNG/WebP
+- Enforce max size (e.g., 2–5MB)
+- Auto-generate thumbnail sizes (optional)
+- Basic server-side validation for file type and size.
+
+========================
+D) DATABASE (PRISMA MODELS)
+========================
+Update schema:
+
+Category:
+- id, name, slug, sortOrder, showOnHomeTabs, createdAt
+- iconImageUrl (nullable)
+- bannerImageUrl (nullable)
+
+Product:
+- id, title, slug, categoryId, price, inStock, stockCount, description, isActive, createdAt, updatedAt
+- primaryImageUrl (nullable)
+
+ProductImage (new table for gallery):
+- id
+- productId (FK)
+- imageUrl
+- storageKey (nullable)
+- sortOrder (int)
+- createdAt
+
+(If using storage keys, store both URL and key to enable deletion.)
+
+========================
+E) API ROUTES (MUST)
+========================
+Uploads:
+- POST /api/admin/upload
+  - Accept multipart/form-data
+  - Return { url, key }
+- DELETE /api/admin/upload?key=...
+  - Deletes file from storage
+
+Products:
+- PATCH /api/admin/products/[id]
+  - Update primaryImageUrl
+  - Update gallery images list (create/update/delete + sortOrder)
+
+Categories:
+- PATCH /api/admin/categories/[id]
+  - Update iconImageUrl + bannerImageUrl
+
+All routes must be RBAC protected (ADMIN role / permissions).
+
+========================
+F) FRONTEND USAGE (MUST)
+========================
+- Home product cards use product.primaryImageUrl
+- Product detail shows gallery:
+  - If gallery exists: show carousel (gallery + primary first)
+  - Else show primary
+- Category pill tabs can show:
+  - icon image (if provided) OR emoji (if already supported)
+- /products page may show banner image at top when a category is selected.
+
+========================
+G) DELIVERABLE
+========================
+- Admin can upload/replace/remove product images and category images
+- Images persist and render across website pages
+- README includes:
+  - storage setup (R2/S3 env vars)
+  - fallback local storage notes
+- Runs on Replit one-click with Prisma migrations updated.

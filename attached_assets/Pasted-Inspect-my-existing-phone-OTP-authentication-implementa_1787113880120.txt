@@ -1,0 +1,64 @@
+Inspect my existing phone OTP authentication implementation.
+
+I have connected my Twilio integration to this Replit App.
+
+Use Twilio Verify for OTP authentication instead of manually generating OTPs.
+
+Credentials are available through Replit secrets/integration:
+TWILIO_ACCOUNT_SID
+TWILIO_API_KEY
+TWILIO_API_SECRET
+TWILIO_VERIFY_SERVICE_SID
+
+Requirements:
+
+1. Create/fix POST /api/send-otp.
+2. Accept phone numbers in E.164 format, for example +917986049301.
+3. Use Twilio Verify:
+   client.verify.v2
+     .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+     .verifications.create({
+       to: phone,
+       channel: "sms"
+     })
+
+4. Create/fix POST /api/verify-otp.
+5. Verify the submitted code using:
+   client.verify.v2
+     .services(process.env.TWILIO_VERIFY_SERVICE_SID)
+     .verificationChecks.create({
+       to: phone,
+       code: code
+     })
+
+6. Only log the user in when verification status is "approved".
+
+7. Do not generate OTP codes locally and do not store plaintext OTPs in the database.
+
+8. Inspect the current rate-limiting logic. The UI currently shows:
+   "Too many OTP requests. Please try again after 10 minutes."
+
+   Do not return this message for every Twilio error.
+
+9. Log the real Twilio error server-side:
+   error.code
+   error.message
+   error.status
+   error.moreInfo
+
+10. Return correct HTTP status codes to the frontend.
+
+11. Add a 60-second resend cooldown to prevent duplicate OTP requests.
+
+12. Disable the Send OTP button immediately after it is clicked so one click cannot generate multiple requests.
+
+13. Prevent double submission caused by React events or repeated API calls.
+
+14. For now use SMS only. Do not use WhatsApp fallback until SMS authentication is working correctly.
+
+15. Preserve the existing website UI and styling. Only repair the authentication flow.
+
+16. After making the changes, test the full flow:
+    phone number → send OTP → enter OTP → Verify API → successful login.
+
+17. Show me the exact Twilio error in the Replit server logs if sending fails.

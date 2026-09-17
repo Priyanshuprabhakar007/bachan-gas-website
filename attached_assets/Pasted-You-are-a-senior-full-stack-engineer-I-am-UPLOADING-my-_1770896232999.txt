@@ -1,0 +1,93 @@
+You are a senior full-stack engineer.
+
+I am UPLOADING my Google AI Studio project files into this Replit workspace. 
+Your job is to make this a COMPLETE working app with BOTH FRONTEND + BACKEND, matching the uploaded project UI/flow EXACTLY.
+
+========================
+GOAL
+========================
+1) Recreate / keep ALL frontend screens, components, and styling exactly like the uploaded Google AI project.
+2) Build a backend API for all dynamic actions used in the UI (auth, CRUD, uploads, payments/bullets/etc if present).
+3) Ensure every button/link/form in the UI works (no dead clicks).
+4) Connect frontend ↔ backend fully (real API calls, real DB).
+5) App must run on Replit with ONE click: “Run” → working web app.
+6) No placeholders, no pseudo code. If something is missing in upload, infer sensibly and implement.
+
+========================
+TECH STACK (Use this)
+========================
+Frontend: Next.js (App Router) + TypeScript + Tailwind
+Backend: Next.js API routes (or Express if already present in uploaded project)
+Database: PostgreSQL (Replit DB) using Prisma ORM
+Auth: Email/password + JWT cookie session (simple, secure)
+Storage: Local /uploads folder in Replit (or Cloudflare R2 only if keys are provided)
+
+========================
+WHAT TO DO STEP BY STEP
+========================
+A) First, scan the uploaded files and list:
+   - Pages/screens
+   - Components
+   - Data models needed
+   - All actions/events (buttons, forms, navigation)
+
+B) Create/adjust the project structure:
+   /app
+     /(public pages)
+     /(dashboard/admin if exists)
+   /components
+   /lib (api client, auth, utils)
+   /prisma (schema + migrations)
+   /uploads (if needed)
+   .env.example
+
+C) Implement backend endpoints for every UI action:
+   - /api/auth/register
+   - /api/auth/login
+   - /api/auth/logout
+   - /api/me
+   - CRUD endpoints based on the app (create/read/update/delete)
+   - file upload endpoints if UI uses images/docs
+   Return consistent JSON and proper error messages.
+
+D) Create Prisma schema based on the UI requirements.
+   Run migrations and seed minimal demo data if needed.
+
+E) Wire frontend to backend:
+   - Replace any fake/mock data with real fetch calls.
+   - Use a centralized API client helper.
+   - Add loading/error states (keep UI design consistent).
+
+F) Fix everything non-working:
+   - Any button that does nothing → implement correct handler.
+   - Any page missing route → create it.
+   - Any broken import → fix.
+   - Any form without validation → add validation + backend checks.
+
+G) Add production basics:
+   - Input validation (zod) + server-side validation
+   - Security: password hashing (bcrypt), httpOnly cookies
+   - Role support if admin panel exists (admin/user)
+   - Logging for backend errors
+
+========================
+STRICT RULES
+========================
+- Do NOT change my UI layout unless required to fix a bug.
+- Keep naming consistent with uploaded project.
+- If something is ambiguous, implement the most standard behavior and document it in README.
+- Provide a README with:
+  - how to run
+  - env vars
+  - endpoints
+  - admin login if created
+  - DB setup
+
+========================
+FINAL OUTPUT
+========================
+- A working Replit project that compiles with no errors.
+- Frontend matches the uploaded Google AI project screens/components.
+- Backend fully implemented and connected.
+- Every UI element is functional.
+Start now by scanning the uploaded files and creating the implementation plan, then implement everything.

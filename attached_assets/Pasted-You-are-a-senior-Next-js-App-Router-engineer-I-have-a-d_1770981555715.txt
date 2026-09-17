@@ -1,0 +1,122 @@
+You are a senior Next.js (App Router) engineer.
+
+I have a dashboard UI like the attached screenshot (dark theme). In the left sidebar there are menu buttons:
+- Overview
+- Book Cylinder
+- Order History
+- Profile
+And there is also a top-right orange button “Book Cylinder”.
+
+Right now these buttons are NOT WORKING (no navigation / no action). Fix them so they properly route to the correct pages and load real content.
+
+TECH STACK:
+- Next.js App Router + Tailwind
+- Replit friendly
+- Use next/link for navigation
+- Use usePathname() to highlight active sidebar item
+- Keep the same UI design, only make buttons functional
+
+========================
+ROUTES TO IMPLEMENT (MUST)
+========================
+Create these routes (App Router):
+1) /dashboard                → Overview page (current page)
+2) /dashboard/book-cylinder   → Booking form page
+3) /dashboard/orders          → Order history list page
+4) /dashboard/profile         → Profile page
+Optional:
+5) /dashboard/overview (redirect to /dashboard)
+
+All sidebar buttons MUST navigate to these routes.
+Top-right “Book Cylinder” button MUST navigate to /dashboard/book-cylinder.
+
+========================
+SIDEBAR BUTTON FIX (MUST)
+========================
+- Replace all sidebar “buttons” that do nothing with <Link> navigation:
+  - Overview      → /dashboard
+  - Book Cylinder → /dashboard/book-cylinder
+  - Order History → /dashboard/orders
+  - Profile       → /dashboard/profile
+
+- Add active state styling:
+  - Use usePathname() and compare with href
+  - If current path matches, apply active background (orange highlight) and icon highlight.
+
+- The “Log Out” button should call a real logout action:
+  - If you have auth: POST /api/auth/logout then redirect to /login
+  - Otherwise: clear local session state and redirect.
+
+========================
+TOP-RIGHT BUTTON FIX (MUST)
+========================
+- The orange top-right button “Book Cylinder” currently does nothing.
+- Make it a <Link href="/dashboard/book-cylinder">Book Cylinder</Link>
+- Also add keyboard accessibility (Enter/Space works)
+
+========================
+PAGES CONTENT (MINIMUM FUNCTIONAL)
+========================
+Create basic functional content so navigation is clearly working:
+
+1) /dashboard (Overview)
+- Keep same header: “Welcome back, {username}”
+- Show cards: Total bookings, Consumer ID, Last delivery
+- Show Recent Orders section with “Book Now” button
+- “Book Now” button must also navigate to /dashboard/book-cylinder
+
+2) /dashboard/book-cylinder
+- Booking form:
+  - Select Cylinder from catalog (dropdown populated from DB or mock)
+  - Quantity selector
+  - Delivery date
+  - Address
+  - Submit button
+- On submit:
+  - Create order (POST /api/orders)
+  - Show success toast
+  - Redirect to /dashboard/orders
+
+3) /dashboard/orders
+- List order history table/cards:
+  - Order ID, item, qty, status, date, amount
+- Clicking an order opens /dashboard/orders/[id] (optional)
+
+4) /dashboard/profile
+- Show profile fields:
+  - Name, phone, email, consumer id
+- Edit + Save button:
+  - PATCH /api/profile
+
+========================
+LAYOUT (IMPORTANT)
+========================
+- Use a shared dashboard layout in:
+  app/dashboard/layout.tsx
+  So sidebar and top bar appear on all dashboard routes.
+- Sidebar component should be reusable:
+  components/dashboard/Sidebar.tsx
+- TopBar component:
+  components/dashboard/TopBar.tsx
+- Ensure all menu items work on every page.
+
+========================
+COMMON BUGS TO FIX (CHECKLIST)
+========================
+- If you used plain <button> without onClick, replace with Link.
+- If you used <a> tags, replace with next/link to avoid full reload.
+- Ensure routes exist as folders under app/dashboard/...
+- If using client components:
+  - Add "use client" at the top of Sidebar/TopBar components.
+- If the sidebar is inside a Server Component, make Sidebar a Client Component.
+
+========================
+DELIVERABLE
+========================
+- All sidebar tabs work and navigate correctly.
+- Top-right “Book Cylinder” button works and navigates correctly.
+- “Book Now” button in Recent Orders also works.
+- Active state highlight works for current route.
+- Pages render with basic functional UI (not blank).
+- No broken imports, no console errors.
+- Ready to run on Replit with one-click.

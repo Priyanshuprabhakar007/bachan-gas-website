@@ -1,0 +1,8 @@
+
+run = "npm run start"
+
+[languages.typescript]
+pattern = "**/*.ts"
+
+[deployment]
+run = "npm run build && npm run server"

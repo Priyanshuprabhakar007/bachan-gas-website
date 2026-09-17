@@ -1,0 +1,228 @@
+You are a senior full-stack engineer.
+
+Build a production-ready “Bachan Gas” cylinder booking website on Replit with:
+- Next.js (App Router) + TailwindCSS
+- Next.js API Routes backend
+- SQLite + Prisma
+- Email/password authentication
+- Modern homepage catalog UI (as previously defined)
+- Admin panel with FULL Role-Based Access Control (RBAC) including sub-admin roles.
+
+========================
+ROLE / PERMISSION SYSTEM
+========================
+Implement a flexible RBAC system (NOT hardcoded). Admin must be able to:
+1) Create NEW roles anytime (e.g., Delivery Man, Gate Keeper, Accountant, Manager, Support, Warehouse, etc.)
+2) Rename roles, disable roles, delete roles (with safety checks)
+3) Assign permissions to each role using checkboxes (module-based permissions)
+4) Create users directly inside a role tab (like “Delivery Man” tab) by filling details
+5) Promote/demote users between roles
+6) Remove users (soft delete / deactivate)
+7) Allow certain roles (e.g., Delivery Man) to create more users of the SAME role if permitted
+
+Default roles:
+- SUPER_ADMIN (full access)
+- ADMIN (full access except managing SUPER_ADMIN)
+- DELIVERY_MAN
+- GATE_KEEPER
+- ACCOUNTANT
+
+ADMIN must be able to add MORE roles later without code changes.
+
+========================
+ADMIN USER CREATION FLOW
+========================
+In Admin Panel:
+- A “Staff & Roles” section exists with tabs for each role (Delivery Man / Gate Keeper / Accountant / etc.)
+- Inside each role tab, admin can click “Add [Role]” and fill:
+  - Full Name
+  - Mobile Number
+  - Email (optional for roles that use OTP login) OR required (choose email+password for all to keep simple)
+  - Password (auto-generate option + copy button)
+  - Address (optional)
+  - ID Proof fields (optional: Aadhar last 4 digits, PAN last 4, etc.)
+  - Joining Date
+  - Notes
+  - Status: Active/Inactive
+- On save:
+  - The user is created in DB and immediately can login as that role
+  - They appear in the role list/table
+- Admin can:
+  - Edit details
+  - Reset password
+  - Deactivate/activate
+  - Remove (soft delete)
+  - Reassign role
+
+Also implement: “Role can manage same role”
+- If enabled by permission, a Delivery Man (or Gate Keeper) who has “STAFF_CREATE_SAME_ROLE” permission can add/remove delivery men (only their role), but cannot touch other roles.
+
+========================
+PERMISSIONS (MODULE-BASED)
+========================
+Build a permissions matrix with these modules (expandable):
+Catalog / Products:
+- PRODUCT_VIEW
+- PRODUCT_CREATE
+- PRODUCT_EDIT
+- PRODUCT_DELETE
+
+Categories:
+- CATEGORY_VIEW
+- CATEGORY_CREATE
+- CATEGORY_EDIT
+- CATEGORY_DELETE
+- CATEGORY_REORDER
+
+Orders:
+- ORDER_VIEW
+- ORDER_CREATE
+- ORDER_EDIT
+- ORDER_ASSIGN_DELIVERY
+- ORDER_STATUS_UPDATE
+- ORDER_CANCEL
+
+Delivery:
+- DELIVERY_VIEW_ASSIGNED_ONLY
+- DELIVERY_UPDATE_STATUS (Out for delivery, Delivered, Failed)
+- DELIVERY_UPLOAD_PROOF (photo / signature optional)
+- DELIVERY_VIEW_ALL (admin-only)
+
+Accounting:
+- PAYMENT_VIEW
+- PAYMENT_REFUND_MARK (manual)
+- INVOICE_VIEW
+- INVOICE_DOWNLOAD
+- REPORTS_VIEW
+
+Staff & Roles:
+- STAFF_VIEW
+- STAFF_CREATE
+- STAFF_EDIT
+- STAFF_DEACTIVATE
+- ROLE_CREATE
+- ROLE_EDIT
+- ROLE_DELETE
+- PERMISSION_EDIT
+
+Settings:
+- SITE_SETTINGS_EDIT (logo/name/contact)
+- BANNERS_EDIT (optional)
+
+Admin can add new permissions later easily (store permissions in DB table, not constants only).
+
+========================
+ROLE-SPECIFIC SCREENS
+========================
+A) Delivery Man Dashboard (/delivery/dashboard)
+- Can see ONLY orders assigned to them (unless permission DELIVERY_VIEW_ALL)
+- Each order card:
+  - customer name, phone, address, product, qty, payment method
+  - buttons to update status:
+    - Picked Up / Out For Delivery / Delivered / Failed
+  - “Delivered” requires OTP from customer OR optional photo proof (configurable)
+- Delivery man cannot edit products/categories unless granted permissions.
+
+B) Gate Keeper Dashboard (/gatekeeper/dashboard)
+- Can see “Today’s outgoing/return cylinders” list
+- Can mark: “Cylinder Issued” / “Cylinder Returned” (simple stock movement log)
+- View only what gatekeeper is allowed.
+
+C) Accountant Dashboard (/accountant/dashboard)
+- Can see payments, order amounts, COD pending, paid orders
+- Can export simple report CSV
+- Can mark “COD Received” for delivered COD orders (if permission granted)
+
+D) Admin Dashboard (/admin)
+- Full access to everything based on permissions.
+
+========================
+ORDER ASSIGNMENT FEATURE
+========================
+In Admin Order Manager:
+- Add “Assign Delivery Man” dropdown (list active delivery men)
+- On assign:
+  - Order gets deliveryManId
+  - Delivery man sees it in their dashboard
+- Assignment history stored.
+
+========================
+DATABASE (Prisma Models)
+========================
+User:
+- id, name, email(unique nullable if needed), mobile(unique), passwordHash,
+- roleId (FK), isActive(bool), createdAt, updatedAt
+
+Role:
+- id, name (unique), slug (unique), isSystem(bool), isActive(bool), createdAt
+
+Permission:
+- id, key (unique), description
+
+RolePermission:
+- id, roleId, permissionId
+
+StaffProfile (optional, can also be merged into User fields):
+- id, userId, address, idProofType, idProofLast4, joiningDate, notes
+
+Product:
+- id, title, price, weight, unit, categoryId, inStock, stockCount, imageUrl, description, isActive, createdAt
+
+Category:
+- id, name, slug, sortOrder, showOnHomeTabs, icon, createdAt
+
+Order:
+- id, userId(customer), productId, qty, amount,
+- address fields, business fields,
+- paymentMethod, paymentStatus, orderStatus,
+- deliveryManId (nullable FK User),
+- assignedAt, deliveredAt, createdAt
+
+OrderStatusLog:
+- id, orderId, status, changedByUserId, note, createdAt
+
+StockMovement (for gatekeeper):
+- id, type (ISSUE/RETURN), productId, qty, note, createdByUserId, createdAt
+
+PaymentTransaction:
+- id, orderId, gateway, status, amount, referenceId, rawResponse, createdAt
+
+========================
+SECURITY / AUTHZ
+========================
+- Every admin API route must enforce permissions (middleware: requirePermission("X"))
+- UI must hide actions user can’t do
+- Soft delete users and roles (isActive) to preserve history
+- SUPER_ADMIN cannot be deleted by ADMIN
+- Prevent deleting a role if users exist (or require reassignment)
+
+========================
+ADMIN PANEL UI REQUIREMENTS
+========================
+Create an “Staff & Roles” section:
+- Left: list of roles (dynamic from DB)
+- Right: role details:
+  - rename role
+  - enable/disable role
+  - permissions checklist
+  - staff list table for that role (search, active filter)
+  - “Add Staff” button opens modal form
+  - edit / reset password / deactivate / delete buttons per staff
+
+Also include:
+- Products manager (CRUD)
+- Categories manager (CRUD + reorder)
+- Orders manager (assign delivery man, update status)
+- Accounting reports (basic)
+
+========================
+DELIVERABLE
+========================
+- Runs on Replit with one click
+- Seed DB with default roles + permissions + one admin user
+- README includes:
+  - admin login credentials
+  - env vars
+  - how to create roles and staff
+  - permission system explanation
+- No pseudo-code. Must compile and run.

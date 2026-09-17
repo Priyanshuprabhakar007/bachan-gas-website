@@ -1,0 +1,58 @@
+You are a senior full-stack engineer working on bachangas.com.
+
+PROBLEM:
+After OTP login, customer name is not shown and UI shows generic “Customer”.
+We want to ask customer name only once, autosave it to user profile, then always reuse it (prefill + show in admin payments table).
+
+GOAL:
+1) Ask “Full Name” only one time (first time after OTP login when name is missing).
+2) Autosave name in DB linked to the OTP phone user.
+3) Next time: do not ask name again; show the saved name everywhere instead of “Customer”.
+
+WHERE TO APPLY:
+A) Pay Online page:
+- Add “Full Name” field only if user.profile.name is null/empty.
+- If name exists, hide the field (or show prefilled disabled).
+- On clicking “Login to Pay” / payment initiation:
+  - if name missing -> require input -> save to profile BEFORE redirect.
+  - if name exists -> proceed directly.
+
+B) Recent Payments (CCAvenue) list (Admin):
+- Replace “Customer” column value with actual saved customer name.
+- Fallback logic:
+  1) payment.customerName (if stored per payment)
+  2) user.name (join via userId/customerId)
+  3) else “Customer”
+
+DATABASE / MODEL:
+- Ensure User table has `name` field (nullable).
+- Ensure Payment/Order table has `customerName` + `customerPhone` (phone already exists from OTP).
+- On payment creation/initiation store:
+  - customerName (from user.name or the newly entered name)
+  - customerPhone (OTP phone)
+
+API CHANGES:
+1) GET /api/me (or session object) must return { phone, name }
+2) PATCH /api/me/profile (or /api/me) to update name:
+   - Input: { name }
+   - Auth required (OTP session/JWT)
+   - Update only current user row
+
+PAYMENT INITIATION FLOW:
+- In initiate payment API:
+  - If user.name missing and request.name provided -> save user.name
+  - Then create payment/order record with customerName and customerPhone
+  - Then redirect to CCAvenue
+
+UI VALIDATION:
+- name required only if missing in profile
+- trim, min 2 chars
+- error message: “Please enter your name”
+
+DELIVERABLE:
+- Provide exact code edits for:
+  1) Pay Online form UI + logic
+  2) Profile update API
+  3) Payment initiation API update (store customerName)
+  4) Admin payments table display update (show name instead of “Customer”)
+- Keep existing design/theme unchanged.
