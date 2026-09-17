@@ -66,16 +66,16 @@ export function isPlaceholderCredential(val?: string | null): boolean {
   ) {
     return true;
   }
-  // Twilio Account SID must start with AC and be followed by 32 hex chars
-  if (cleaned.startsWith("AC") && !/^AC[0-9a-fA-F]{32}$/.test(cleaned)) {
+  // Twilio Account SID must start with AC and be followed by 32 alphanumeric chars
+  if (cleaned.startsWith("AC") && !/^AC[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
-  // Twilio API Key must start with SK and be followed by 32 hex chars
-  if (cleaned.startsWith("SK") && !/^SK[0-9a-fA-F]{32}$/.test(cleaned)) {
+  // Twilio API Key must start with SK and be followed by 32 alphanumeric chars
+  if (cleaned.startsWith("SK") && !/^SK[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
-  // Twilio Verify SID must start with VA and be followed by 32 hex chars
-  if (cleaned.startsWith("VA") && !/^VA[0-9a-fA-F]{32}$/.test(cleaned)) {
+  // Twilio Verify SID must start with VA and be followed by 32 alphanumeric chars
+  if (cleaned.startsWith("VA") && !/^VA[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
   return false;

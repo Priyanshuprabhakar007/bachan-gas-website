@@ -184,6 +184,54 @@ export function setupAuth(app: Express) {
   app.post("/api/auth/verify-otp", handleVerifyOtp);
   app.post("/api/verify-otp", handleVerifyOtp);
 
+  app.post("/api/auth/login-after-verify", async (req, res) => {
+    try {
+      const { phone, secret } = req.body;
+      const expectedSecret = process.env.TWILIO_AUTH_TOKEN?.trim();
+
+      if (!secret || !expectedSecret || secret !== expectedSecret) {
+        return res.status(403).json({ success: false, message: "Unauthorized internal login request." });
+      }
+
+      const formattedPhone = normalizePhone(phone);
+      let user = await storage.getUserByPhone(formattedPhone);
+
+      if (!user) {
+        const randomSuffix = randomBytes(4).toString("hex");
+        const username = `phone_${formattedPhone.replace('+', '')}_${randomSuffix}`;
+        const placeholderPassword = await hashPassword(randomBytes(32).toString("hex"));
+
+        user = await storage.createUser({
+          username,
+          password: placeholderPassword,
+          name: `Customer`,
+          email: null,
+          phone: formattedPhone,
+          role: UserRole.CUSTOMER,
+          isActive: true,
+        });
+      }
+
+      req.login(user, (loginErr: any) => {
+        if (loginErr) {
+          console.error("Internal login session error:", loginErr);
+          return res.status(500).json({ success: false, message: "Login failed." });
+        }
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error("Internal session save error:", saveErr);
+            return res.status(500).json({ success: false, message: "Session error." });
+          }
+          console.log("Internal login successful for user:", user!.id, formattedPhone);
+          res.json({ ok: true, success: true, user: sanitizeUser(user!) });
+        });
+      });
+    } catch (err: any) {
+      console.error("login-after-verify error:", err);
+      res.status(500).json({ success: false, message: err.message || "Internal verification sync failed." });
+    }
+  });
+
   app.post("/api/register", async (req, res, next) => {
     try {
       const existingUser = await storage.getUserByUsername(req.body.username);
