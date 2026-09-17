@@ -1,13 +1,13 @@
 import serverless from "serverless-http";
 import { initApp } from "../../server/index";
 
-let handler: any;
+let serverlessHandler: any;
 
 export const handler = async (event: any, context: any) => {
   // Initialize app if not already initialized
-  if (!handler) {
+  if (!serverlessHandler) {
     const app = await initApp();
-    handler = serverless(app);
+    serverlessHandler = serverless(app);
   }
-  return handler(event, context);
+  return serverlessHandler(event, context);
 };
