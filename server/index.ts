@@ -23,6 +23,17 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Normalize Netlify serverless functions prefix for routing
+app.use((req, res, next) => {
+  if (req.url.startsWith("/.netlify/functions/api")) {
+    req.url = req.url.substring("/.netlify/functions/api".length);
+  }
+  if (!req.url.startsWith("/")) {
+    req.url = "/" + req.url;
+  }
+  next();
+});
+
 // Custom CORS handler supporting cross-site credentials for separate domains
 app.use((req, res, next) => {
   const origin = req.headers.origin;
