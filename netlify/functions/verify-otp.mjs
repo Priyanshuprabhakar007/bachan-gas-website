@@ -93,8 +93,8 @@ export const handler = async (event, context) => {
     }
 
     // If approved, trigger login session creation on main express server
-    const protocol = event.headers["x-forwarded-proto"] || "http";
     const host = event.headers.host;
+    const protocol = (host.includes("localhost") || host.includes("127.0.0.1")) ? "http" : "https";
     const loginUrl = `${protocol}://${host}/api/auth/login-after-verify`;
 
     const loginRes = await fetch(loginUrl, {

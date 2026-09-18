@@ -24,6 +24,7 @@ try {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       connectionTimeoutMillis: 10000,
+      ssl: process.env.DATABASE_URL.includes("localhost") || process.env.DATABASE_URL.includes("127.0.0.1") ? false : { rejectUnauthorized: false },
     });
     db = drizzle(pool, { schema });
   } else {
