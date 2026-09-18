@@ -8,9 +8,9 @@ import { z } from "zod";
 import { setupAuth, hashPassword, sanitizeUser } from "./auth";
 import { normalizePhone } from "./otpService";
 import { randomBytes } from "crypto";
-import { UserRole, DEFAULT_PERMISSIONS, PickupRequestStatus, TripStatus, TripReturnStatus, pickupRequestItems, tripReturnItems, pickupRequests as pickupRequestsTable, orders as ordersTable } from "@shared/schema";
+import { UserRole, DEFAULT_PERMISSIONS, PickupRequestStatus, TripStatus, TripReturnStatus, pickupRequestItems, tripReturnItems, pickupRequests as pickupRequestsTable, orders as ordersTable, users as usersTable, products as productsTable, categories as categoriesTable, siteSettings as siteSettingsTable } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { ObjectStorageService, objectStorageClient } from "./replit_integrations/object_storage";
 import multer from "multer";
@@ -484,7 +484,31 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  console.log("[Database] Environment", {
+    databaseConfigured: !!process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV
+  });
   setupAuth(app);
+
+  app.get('/api/database-health', async (_req, res) => {
+    try {
+      const usersCount = await db.select({ count: sql<number>`count(*)` }).from(usersTable);
+      const productsCount = await db.select({ count: sql<number>`count(*)` }).from(productsTable);
+      const categoriesCount = await db.select({ count: sql<number>`count(*)` }).from(categoriesTable);
+      const settingsCount = await db.select({ count: sql<number>`count(*)` }).from(siteSettingsTable);
+
+      res.json({
+        databaseConnected: true,
+        usersCount: Number(usersCount[0].count),
+        productsCount: Number(productsCount[0].count),
+        categoriesCount: Number(categoriesCount[0].count),
+        settingsCount: Number(settingsCount[0].count)
+      });
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      res.status(500).json({ databaseConnected: false, error: "Health check failed" });
+    }
+  });
 
   app.patch('/api/profile', async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
@@ -1164,6 +1188,9 @@ export async function registerRoutes(
   // Categories (public - only active home tabs)
   app.get(api.categories.list.path, async (_req, res) => {
     const cats = await storage.getCategoriesForHome();
+    console.log("[Categories API]", {
+      count: cats.length
+    });
     res.json(cats);
   });
 
@@ -1221,6 +1248,9 @@ export async function registerRoutes(
   // Products
   app.get(api.products.list.path, async (_req, res) => {
     const prods = await storage.getProducts();
+    console.log("[Products API]", {
+      count: prods.length
+    });
     res.json(prods);
   });
 
@@ -2088,10 +2118,7 @@ export async function registerRoutes(
     }
   });
 
-  const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
-  if (!isNetlify) {
-    seedDatabase().catch(console.error);
-  }
+  seedDatabase().catch(console.error);
 
   return httpServer;
 }
