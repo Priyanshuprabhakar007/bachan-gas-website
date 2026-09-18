@@ -76,6 +76,50 @@ export function useAuth() {
     },
   });
 
+  const sendOtpMutation = useMutation({
+    mutationFn: async (phone: string) => {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw {
+          message: data.message || "Failed to send OTP via SMS",
+          code: data.code,
+        };
+      }
+      return data;
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async ({ phone, code }: { phone: string; code: string }) => {
+      const res = await fetch("/api/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, code }),
+        credentials: "include",
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Invalid OTP code");
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([api.auth.me.path], data.user);
+      queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
+      if (data.user?.phone) {
+        localStorage.setItem("customer_phone", data.user.phone);
+      }
+      toast({ title: "Welcome!", description: "You have been logged in successfully" });
+    },
+  });
+
   return {
     user: userQuery.data,
     isLoading: userQuery.isLoading,
@@ -84,5 +128,9 @@ export function useAuth() {
     register: registerMutation.mutate,
     isRegistering: registerMutation.isPending,
     logout: logoutMutation.mutate,
+    sendOtp: sendOtpMutation.mutateAsync,
+    isSendingOtp: sendOtpMutation.isPending,
+    verifyOtp: verifyOtpMutation.mutateAsync,
+    isVerifyingOtp: verifyOtpMutation.isPending,
   };
 }

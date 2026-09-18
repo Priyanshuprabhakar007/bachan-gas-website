@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
 export default function LoginPage() {
-  const { user } = useAuth();
+  const { user, sendOtp: triggerSendOtp, isSendingOtp, verifyOtp: triggerVerifyOtp, isVerifyingOtp } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -17,11 +17,12 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("+91");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [devOtp, setDevOtp] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const isSendingRef = useRef(false);
   const isVerifyingRef = useRef(false);
+
+  const isSending = isSendingOtp;
+  const isVerifying = isVerifyingOtp;
 
   const otpRefs = [
     useRef<HTMLInputElement>(null),
@@ -89,38 +90,8 @@ export default function LoginPage() {
     }
 
     isSendingRef.current = true;
-    setIsSending(true);
     try {
-      const res = await fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: e164 }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        let errorDesc = data.message || "Failed to send OTP via SMS";
-        
-        // Handle Twilio specific codes
-        if (data.code === 21608) {
-          errorDesc = "This is a Twilio trial account. The recipient's phone number must be verified in the Twilio Console before trying again.";
-        } else if (data.code === 20003 || data.code === 70051) {
-          errorDesc = "Twilio credentials configured on Netlify are invalid. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.";
-        } else if (data.code === 60200) {
-          errorDesc = "The phone number is in an invalid format. Ensure it follows E.164 format (e.g., +917004204745).";
-        } else if (data.code === 60203) {
-          errorDesc = "Too many OTP attempts have been sent to this number. Please try again later.";
-        } else if (data.message?.includes("Missing") || data.message?.includes("invalid TWILIO")) {
-          errorDesc = `${data.message} Please check that TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are configured in Netlify Settings.`;
-        }
-
-        toast({ 
-          variant: "destructive", 
-          title: "Failed to Send OTP", 
-          description: errorDesc 
-        });
-        return;
-      }
+      const data = await triggerSendOtp(e164);
       setDevOtp(data.devOtp || null);
       setStep("otp");
       setResendCooldown(60);
@@ -132,11 +103,29 @@ export default function LoginPage() {
           ? `Preview code generated: ${data.devOtp}`
           : "Please check your SMS for the verification code",
       });
-    } catch {
-      toast({ variant: "destructive", title: "Network Error", description: "Could not reach the server. Please try again." });
+    } catch (error: any) {
+      let errorDesc = error.message || "Failed to send OTP via SMS";
+      
+      // Handle Twilio specific codes
+      if (error.code === 21608) {
+        errorDesc = "This is a Twilio trial account. The recipient's phone number must be verified in the Twilio Console before trying again.";
+      } else if (error.code === 20003 || error.code === 70051) {
+        errorDesc = "Twilio credentials configured on Netlify are invalid. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.";
+      } else if (error.code === 60200) {
+        errorDesc = "The phone number is in an invalid format. Ensure it follows E.164 format (e.g., +917004204745).";
+      } else if (error.code === 60203) {
+        errorDesc = "Too many OTP attempts have been sent to this number. Please try again later.";
+      } else if (error.message?.includes("Missing") || error.message?.includes("invalid TWILIO")) {
+        errorDesc = `${error.message} Please check that TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are configured in Netlify Settings.`;
+      }
+
+      toast({ 
+        variant: "destructive", 
+        title: "Failed to Send OTP", 
+        description: errorDesc 
+      });
     } finally {
       isSendingRef.current = false;
-      setIsSending(false);
     }
   };
 
@@ -144,34 +133,20 @@ export default function LoginPage() {
     if (isVerifyingRef.current) return;
     const e164 = phone.replace(/\s/g, "");
     isVerifyingRef.current = true;
-    setIsVerifying(true);
     try {
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: e164, code: otpCode }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Verification Failed", description: data.message || "Invalid OTP" });
-        setOtp(["", "", "", "", "", ""]);
-        otpRefs[0].current?.focus();
-        return;
-      }
+      const data = await triggerVerifyOtp({ phone: e164, code: otpCode });
       queryClient.setQueryData(["/api/user"], data.user);
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       if (data.user?.phone) {
         localStorage.setItem("customer_phone", data.user.phone);
       }
-      toast({ title: "Welcome!", description: "You have been logged in successfully" });
     } catch {
-      toast({ variant: "destructive", title: "Error", description: "Network error. Please try again." });
+      setOtp(["", "", "", "", "", ""]);
+      otpRefs[0].current?.focus();
     } finally {
       isVerifyingRef.current = false;
-      setIsVerifying(false);
     }
-  }, [phone, toast]);
+  }, [phone, triggerVerifyOtp]);
 
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
