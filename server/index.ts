@@ -110,7 +110,10 @@ export async function initApp() {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
+    const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
+    if (!isNetlify) {
+      serveStatic(app);
+    }
   } else {
     const viteModule = "./vite";
     const { setupVite } = await import(viteModule);
