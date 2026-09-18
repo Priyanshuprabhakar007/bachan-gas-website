@@ -8,21 +8,6 @@
   external_node_modules = ["@babel/preset-typescript", "vite"]
 
 [[redirects]]
-  from = "/api/send-otp"
-  to = "/.netlify/functions/send-otp"
-  status = 200
-
-[[redirects]]
-  from = "/api/verify-otp"
-  to = "/.netlify/functions/verify-otp"
-  status = 200
-
-[[redirects]]
-  from = "/api/otp-health"
-  to = "/.netlify/functions/otp-health"
-  status = 200
-
-[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
   status = 200
