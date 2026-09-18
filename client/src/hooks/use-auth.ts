@@ -131,6 +131,8 @@ export function useAuth() {
     sendOtp: sendOtpMutation.mutateAsync,
     isSendingOtp: sendOtpMutation.isPending,
     verifyOtp: verifyOtpMutation.mutateAsync,
+    verifyOTP: verifyOtpMutation.mutateAsync,
     isVerifyingOtp: verifyOtpMutation.isPending,
+    isVerifyingOTP: verifyOtpMutation.isPending,
   };
 }

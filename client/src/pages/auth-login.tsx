@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
 export default function LoginPage() {
-  const { user, sendOtp: triggerSendOtp, isSendingOtp, verifyOtp: triggerVerifyOtp, isVerifyingOtp } = useAuth();
+  const { user, sendOtp: triggerSendOtp, isSendingOtp, verifyOTP, isVerifyingOTP } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -22,7 +22,7 @@ export default function LoginPage() {
   const isVerifyingRef = useRef(false);
 
   const isSending = isSendingOtp;
-  const isVerifying = isVerifyingOtp;
+  const isVerifying = isVerifyingOTP;
 
   const otpRefs = [
     useRef<HTMLInputElement>(null),
@@ -134,7 +134,7 @@ export default function LoginPage() {
     const e164 = phone.replace(/\s/g, "");
     isVerifyingRef.current = true;
     try {
-      const data = await triggerVerifyOtp({ phone: e164, code: otpCode });
+      const data = await verifyOTP({ phone: e164, code: otpCode });
       queryClient.setQueryData(["/api/user"], data.user);
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       if (data.user?.phone) {
@@ -146,7 +146,7 @@ export default function LoginPage() {
     } finally {
       isVerifyingRef.current = false;
     }
-  }, [phone, triggerVerifyOtp]);
+  }, [phone, verifyOTP]);
 
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
