@@ -137,7 +137,31 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((u) => u.phone === phone);
+    if (!phone) return undefined;
+    const cleaned = phone.replace(/[^\d+]/g, "");
+    let canonical = cleaned;
+    let fallback10 = cleaned;
+    let fallback91 = cleaned;
+    
+    if (cleaned.startsWith("+91") && cleaned.length === 13) {
+      canonical = cleaned;
+      fallback10 = cleaned.substring(3);
+      fallback91 = cleaned.substring(1);
+    } else if (cleaned.startsWith("91") && cleaned.length === 12) {
+      canonical = "+" + cleaned;
+      fallback10 = cleaned.substring(2);
+      fallback91 = cleaned;
+    } else if (cleaned.length === 10) {
+      canonical = "+91" + cleaned;
+      fallback10 = cleaned;
+      fallback91 = "91" + cleaned;
+    }
+
+    return Array.from(this.users.values()).find((u) => {
+      if (!u.phone) return false;
+      const up = u.phone.replace(/[^\d+]/g, "");
+      return up === canonical || up === fallback10 || up === fallback91;
+    });
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

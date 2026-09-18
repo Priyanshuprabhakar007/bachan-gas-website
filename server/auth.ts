@@ -163,28 +163,14 @@ export function setupAuth(app: Express) {
         });
       }
 
-      let user = await storage.getUserByPhone(formattedPhone);
+      const user = await storage.getUserByPhone(formattedPhone);
 
-      if (!user) {
-        const randomSuffix = randomBytes(4).toString("hex");
-        const username = `phone_${formattedPhone.replace('+', '')}_${randomSuffix}`;
-        const placeholderPassword = await hashPassword(randomBytes(32).toString("hex"));
-
-        user = await storage.createUser({
-          username,
-          password: placeholderPassword,
-          name: `Customer`,
-          email: null,
-          phone: formattedPhone,
-          role: UserRole.CUSTOMER,
-          isActive: true,
-        });
-      }
-
-      console.log("[OTP Login] User lookup:", {
+      console.log("[OTP Login] Looking up user", {
+        phoneNormalized: formattedPhone,
+        userSource: "PostgreSQL Database",
         found: !!user,
-        id: user?.id || (user as any)?.uid,
-        role: user?.role
+        userId: user?.id || (user as any)?.uid || null,
+        role: user?.role || null
       });
 
       if (!user) {
@@ -218,8 +204,8 @@ export function setupAuth(app: Express) {
             authenticated: true,
             user: {
               id: userId,
-              phone: user!.phone,
-              role: user!.role
+              phone: user.phone,
+              role: user.role
             }
           });
         });
@@ -247,35 +233,20 @@ export function setupAuth(app: Express) {
       }
 
       const formattedPhone = normalizePhone(phone);
-      let user = await storage.getUserByPhone(formattedPhone);
+      const user = await storage.getUserByPhone(formattedPhone);
 
-      if (!user) {
-        const randomSuffix = randomBytes(4).toString("hex");
-        const username = `phone_${formattedPhone.replace('+', '')}_${randomSuffix}`;
-        const placeholderPassword = await hashPassword(randomBytes(32).toString("hex"));
-
-        user = await storage.createUser({
-          username,
-          password: placeholderPassword,
-          name: `Customer`,
-          email: null,
-          phone: formattedPhone,
-          role: UserRole.CUSTOMER,
-          isActive: true,
-        });
-      }
-
-      console.log("[OTP Login] Twilio verification status: approved");
-      console.log("[OTP Login] User lookup:", {
+      console.log("[OTP Login] Looking up user", {
+        phoneNormalized: formattedPhone,
+        userSource: "PostgreSQL Database",
         found: !!user,
-        id: user?.id || (user as any)?.uid,
-        role: user?.role
+        userId: user?.id || (user as any)?.uid || null,
+        role: user?.role || null
       });
 
       if (!user) {
-        return res.status(500).json({
+        return res.status(404).json({
           success: false,
-          message: "Database connection is not configured or user creation failed. Please check your DATABASE_URL configuration.",
+          message: "No user account is linked to this phone number."
         });
       }
 
@@ -303,8 +274,8 @@ export function setupAuth(app: Express) {
             authenticated: true,
             user: {
               id: userId,
-              phone: user!.phone,
-              role: user!.role
+              phone: user.phone,
+              role: user.role
             }
           });
         });

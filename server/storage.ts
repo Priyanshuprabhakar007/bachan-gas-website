@@ -32,7 +32,7 @@ import {
   paymentTransactions,
   PickupRequestStatus, TripStatus, TripReturnStatus
 } from "@shared/schema";
-import { eq, desc, sql, and, ne, inArray, asc, ilike, gte, lte, between } from "drizzle-orm";
+import { eq, desc, sql, and, ne, inArray, asc, ilike, gte, lte, between, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -210,8 +210,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.phone, phone));
-    return user;
+    if (!phone) return undefined;
+    
+    // Normalize input digits
+    const cleaned = phone.replace(/[^\d+]/g, "");
+    let canonical = cleaned;
+    let fallback10 = cleaned;
+    let fallback91 = cleaned;
+    
+    if (cleaned.startsWith("+91") && cleaned.length === 13) {
+      canonical = cleaned;
+      fallback10 = cleaned.substring(3); // 10 digits
+      fallback91 = cleaned.substring(1); // 91 + 10 digits
+    } else if (cleaned.startsWith("91") && cleaned.length === 12) {
+      canonical = "+" + cleaned;
+      fallback10 = cleaned.substring(2);
+      fallback91 = cleaned;
+    } else if (cleaned.length === 10) {
+      canonical = "+91" + cleaned;
+      fallback10 = cleaned;
+      fallback91 = "91" + cleaned;
+    }
+
+    // Try finding the user by any of these variations
+    const results = await db.select().from(users).where(
+      or(
+        eq(users.phone, canonical),
+        eq(users.phone, fallback10),
+        eq(users.phone, fallback91)
+      )
+    );
+    
+    return results[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
