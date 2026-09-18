@@ -126,10 +126,10 @@ export function DashboardLayout({ children, role }: DashboardLayoutProps) {
             <>
               <div className="flex items-center gap-3 px-3 mb-4">
                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center text-white font-bold shadow-inner">
-                  {(user?.name || storedPhone || 'U').charAt(0)}
+                  {(user?.name || user?.username || user?.phone || storedPhone || 'User').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-white truncate w-32">{user?.name || storedPhone}</span>
+                  <span className="text-sm font-medium text-white truncate w-32">{user?.name || user?.phone || user?.username || storedPhone || 'User'}</span>
                   <span className="text-xs text-muted-foreground capitalize">{role}</span>
                 </div>
               </div>

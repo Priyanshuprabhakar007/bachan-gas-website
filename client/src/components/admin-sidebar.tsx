@@ -98,12 +98,12 @@ export function AdminSidebar({ user, onLogout }: AdminSidebarProps) {
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8" data-testid="img-sidebar-avatar">
               <AvatarFallback className="text-xs">
-                {user.name?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || "A"}
+                {user?.name?.charAt(0)?.toUpperCase() || user?.username?.charAt(0)?.toUpperCase() || user?.phone?.charAt(0)?.toUpperCase() || "A"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate" data-testid="text-sidebar-username">
-                {user.name || user.username}
+                {user?.name || user?.username || user?.phone || "User"}
               </p>
               <p className="text-xs text-muted-foreground truncate" data-testid="text-sidebar-role">
                 {user.role}

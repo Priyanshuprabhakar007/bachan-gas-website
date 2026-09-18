@@ -40,16 +40,20 @@ async function comparePasswords(supplied: string, stored: string) {
 export function setupAuth(app: Express) {
   app.set("trust proxy", 1);
 
+  if (!process.env.SESSION_SECRET) {
+    console.warn("[Session Setup] WARNING: SESSION_SECRET is missing in environment variables. Defaulting to a stable fallback secret.");
+  }
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "bachan_gas_secret_key_session_store_2026",
     resave: false,
     saveUninitialized: false,
     store: new FirestoreSessionStore(),
     cookie: {
-      secure: false, // Set to false to allow HTTP in dev/iframe
-      sameSite: "lax" as const,
       httpOnly: true,
-      maxAge: 365 * 24 * 60 * 60 * 1000,
+      secure: true,
+      sameSite: "lax" as const,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     }
   };
 
@@ -209,26 +213,39 @@ export function setupAuth(app: Express) {
 
       const userId = user.id;
 
-      req.login(user, (loginErr: any) => {
+      req.logIn(user, (loginErr: any) => {
         if (loginErr) {
           console.error("OTP login session error:", loginErr);
-          return res.status(500).json({ success: false, message: "Login failed. Please try again." });
+          return res.status(500).json({
+            success: false,
+            message: "Could not create login session."
+          });
         }
+
         req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("OTP session save error:", saveErr);
-            return res.status(500).json({ success: false, message: "Session error. Please try again." });
+            return res.status(500).json({
+              success: false,
+              message: "Could not save login session."
+            });
           }
-          console.log("[OTP Auth] Session established");
-          console.log("OTP login successful for user:", userId, formattedPhone);
-          res.json({
+
+          console.log("[OTP Auth] Session saved", {
+            sessionID: req.sessionID,
+            authenticated: req.isAuthenticated(),
+            hasUser: !!req.user,
+            userId: req.user?.id || null
+          });
+
+          return res.status(200).json({
             success: true,
             authenticated: true,
-            isNewUser,
             user: {
-              id: userId,
+              id: user.id,
               phone: user.phone,
-              role: user.role === UserRole.CUSTOMER ? "customer" : (user.role ? user.role.toLowerCase() : "customer")
+              role: user.role,
+              name: user.name || null
             }
           });
         });
@@ -309,26 +326,39 @@ export function setupAuth(app: Express) {
 
       const userId = user.id;
 
-      req.login(user, (loginErr: any) => {
+      req.logIn(user, (loginErr: any) => {
         if (loginErr) {
           console.error("Internal login session error:", loginErr);
-          return res.status(500).json({ success: false, message: "Login failed." });
+          return res.status(500).json({
+            success: false,
+            message: "Could not create login session."
+          });
         }
+
         req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("Internal session save error:", saveErr);
-            return res.status(500).json({ success: false, message: "Session error." });
+            return res.status(500).json({
+              success: false,
+              message: "Could not save login session."
+            });
           }
-          console.log("[OTP Auth] Session established");
-          console.log("Internal login successful for user:", userId, formattedPhone);
-          res.json({
+
+          console.log("[OTP Auth] Session saved", {
+            sessionID: req.sessionID,
+            authenticated: req.isAuthenticated(),
+            hasUser: !!req.user,
+            userId: req.user?.id || null
+          });
+
+          return res.status(200).json({
             success: true,
             authenticated: true,
-            isNewUser,
             user: {
-              id: userId,
+              id: user.id,
               phone: user.phone,
-              role: user.role === UserRole.CUSTOMER ? "customer" : (user.role ? user.role.toLowerCase() : "customer")
+              role: user.role,
+              name: user.name || null
             }
           });
         });
@@ -373,8 +403,19 @@ export function setupAuth(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(sanitizeUser(req.user!));
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const sanitized = sanitizeUser(req.user);
+    return res.status(200).json({
+      ...sanitized,
+      success: true,
+      user: sanitized
+    });
   });
 
   app.post("/api/log-diagnostic", (req, res) => {

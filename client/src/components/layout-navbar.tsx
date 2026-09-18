@@ -91,7 +91,7 @@ export function Navbar() {
                    <DropdownMenuTrigger asChild>
                      <Button variant="ghost" className="gap-2 px-2 hover:bg-white/5">
                        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                         {user.name.charAt(0)}
+                         {(user?.name || user?.username || user?.phone || "User").charAt(0).toUpperCase()}
                        </div>
                        <span className="text-sm font-medium text-white">{user.username}</span>
                      </Button>
@@ -161,9 +161,9 @@ export function Navbar() {
                 <div className="space-y-2">
                    <div className="flex items-center gap-3 px-4 mb-3">
                       <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                         {user.name.charAt(0)}
+                         {(user?.name || user?.username || user?.phone || "User").charAt(0).toUpperCase()}
                        </div>
-                       <span className="font-medium text-white">{user.name}</span>
+                       <span className="font-medium text-white">{user.name || user.phone || user.username || "User"}</span>
                    </div>
                    <Button onClick={() => logout()} variant="destructive" className="w-full justify-start">
                       <LogOut className="mr-2 h-4 w-4" /> Log out

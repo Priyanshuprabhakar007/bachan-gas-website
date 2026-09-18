@@ -152,7 +152,7 @@ export default function LoginPage() {
         } catch (checkErr) {
           toast({
             title: "Session Error",
-            description: "Session could not be established securely. Please request a new OTP.",
+            description: "Login session could not be established. Please try again.",
             variant: "destructive",
           });
           setOtp(["", "", "", "", "", ""]);

@@ -67,10 +67,10 @@ export default function CustomerProfile() {
           <CardHeader>
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                {user?.name?.charAt(0) || "U"}
+                {user?.name?.charAt(0) || user?.username?.charAt(0) || user?.phone?.charAt(0) || "U"}
               </div>
               <div>
-                <CardTitle>{user?.name}</CardTitle>
+                <CardTitle>{user?.name || user?.phone || user?.username || "User"}</CardTitle>
                 <CardDescription className="flex items-center gap-2 mt-1">
                   <Flame className="h-3.5 w-3.5 text-primary" />
                   Consumer ID: {user?.consumerId || "Not assigned"}

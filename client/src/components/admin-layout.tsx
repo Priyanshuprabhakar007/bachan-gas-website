@@ -72,11 +72,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8" data-testid="img-header-avatar">
                   <AvatarFallback className="text-xs">
-                    {user.name?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || "A"}
+                    {user?.name?.charAt(0)?.toUpperCase() || user?.username?.charAt(0)?.toUpperCase() || user?.phone?.charAt(0)?.toUpperCase() || "A"}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-sm font-medium hidden md:inline" data-testid="text-header-username">
-                  {user.name || user.username}
+                  {user?.name || user?.username || user?.phone || "User"}
                 </span>
               </div>
             </div>
