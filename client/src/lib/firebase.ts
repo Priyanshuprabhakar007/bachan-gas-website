@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { initializeFirestore, doc, getDocFromServer } from "firebase/firestore";
+import { initializeFirestore, doc, getDocFromServer, setLogLevel } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Firebase Applet Configuration
@@ -13,6 +13,9 @@ const firebaseConfig = {
   messagingSenderId: "195787241971",
   oAuthClientId: "195787241971-ma6ot177mpot7grqoonjfaaficgj31re.apps.googleusercontent.com"
 };
+
+// Set log level to only errors to suppress annoying non-fatal WebSocket connection warnings
+setLogLevel("error");
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
