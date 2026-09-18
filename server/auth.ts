@@ -40,26 +40,26 @@ async function comparePasswords(supplied: string, stored: string) {
 export function setupAuth(app: Express) {
   app.set("trust proxy", 1);
 
-  if (!process.env.SESSION_SECRET) {
-    console.warn("[Session Setup] WARNING: SESSION_SECRET is missing in environment variables. Defaulting to a stable fallback secret.");
-  }
+  const isSecretConfigured = !!process.env.SESSION_SECRET;
+  console.log(`SESSION_SECRET configured: ${isSecretConfigured}`);
 
-  const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "bachan_gas_secret_key_session_store_2026",
+  const sessionSecret = process.env.SESSION_SECRET || "bachan_gas_secret_key_session_store_2026";
+
+  app.use(session({
+    name: "bgs.sid",
+    secret: sessionSecret,
+    store: new FirestoreSessionStore(),
     resave: false,
     saveUninitialized: false,
-    store: new FirestoreSessionStore(),
+    proxy: true,
     cookie: {
       httpOnly: true,
       secure: true,
-      sameSite: "lax" as const,
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 30 * 24 * 60 * 60 * 1000
     }
-  };
-
-  app.use(session(sessionSettings));
-  
-  // Removed dynamic cookie settings for now as they might be causing issues
+  }));
 
   app.use(passport.initialize());
   app.use(passport.session());
@@ -84,22 +84,31 @@ export function setupAuth(app: Express) {
       return done(new Error("Cannot serialize user without id"));
     }
 
-    done(null, user.id);
+    return done(null, user.id);
   });
 
   passport.deserializeUser(async (id: any, done) => {
     try {
-      const parsedId = Number(id);
-      if (isNaN(parsedId)) {
-        return done(new Error(`Invalid user ID format in session: ${id}`));
-      }
-      const user = await storage.getUser(parsedId);
-      if (!user) {
+      const userId = Number(id);
+      if (isNaN(userId)) {
+        console.error("[Auth] deserializeUser received invalid NaN id", { id, type: typeof id });
         return done(null, false);
       }
-      done(null, user);
-    } catch (err) {
-      done(err);
+
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        console.error("[Auth] deserializeUser user not found", {
+          idType: typeof id,
+          id
+        });
+
+        return done(null, false);
+      }
+
+      return done(null, user);
+    } catch (error) {
+      return done(error);
     }
   });
 
@@ -222,6 +231,14 @@ export function setupAuth(app: Express) {
           });
         }
 
+        console.log("[OTP Auth] After req.logIn", {
+          authenticated: req.isAuthenticated(),
+          hasUser: !!req.user,
+          userId: req.user?.id ?? null,
+          sessionID: req.sessionID ?? null,
+          passportUser: req.session?.passport?.user ?? null
+        });
+
         req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("OTP session save error:", saveErr);
@@ -235,7 +252,8 @@ export function setupAuth(app: Express) {
             sessionID: req.sessionID,
             authenticated: req.isAuthenticated(),
             hasUser: !!req.user,
-            userId: req.user?.id || null
+            userId: req.user?.id || null,
+            passportUser: req.session?.passport?.user ?? null
           });
 
           return res.status(200).json({
@@ -335,6 +353,14 @@ export function setupAuth(app: Express) {
           });
         }
 
+        console.log("[OTP Auth] After req.logIn", {
+          authenticated: req.isAuthenticated(),
+          hasUser: !!req.user,
+          userId: req.user?.id ?? null,
+          sessionID: req.sessionID ?? null,
+          passportUser: req.session?.passport?.user ?? null
+        });
+
         req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("Internal session save error:", saveErr);
@@ -348,7 +374,8 @@ export function setupAuth(app: Express) {
             sessionID: req.sessionID,
             authenticated: req.isAuthenticated(),
             hasUser: !!req.user,
-            userId: req.user?.id || null
+            userId: req.user?.id || null,
+            passportUser: req.session?.passport?.user ?? null
           });
 
           return res.status(200).json({
@@ -403,6 +430,15 @@ export function setupAuth(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
+    console.log("[Session Debug] /api/user", {
+      hasCookieHeader: !!req.headers.cookie,
+      sessionID: req.sessionID ?? null,
+      passportUser: req.session?.passport?.user ?? null,
+      authenticated: req.isAuthenticated?.() ?? false,
+      hasUser: !!req.user,
+      userId: req.user?.id ?? null
+    });
+
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({
         success: false,
