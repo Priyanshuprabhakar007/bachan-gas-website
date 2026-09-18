@@ -163,22 +163,38 @@ export function setupAuth(app: Express) {
         });
       }
 
-      const user = await storage.getUserByPhone(formattedPhone);
+      let user = await storage.getUserByPhone(formattedPhone);
+      let isNewUser = false;
 
-      console.log("[OTP Login] Looking up user", {
-        phoneNormalized: formattedPhone,
-        userSource: "PostgreSQL Database",
-        found: !!user,
-        userId: user?.id || (user as any)?.uid || null,
-        role: user?.role || null
-      });
+      console.log("[OTP Auth] Verification approved");
 
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "No user account is linked to this phone number."
-        });
+        const randomSuffix = randomBytes(4).toString("hex");
+        const username = `phone_${formattedPhone.replace("+", "")}_${randomSuffix}`;
+        const placeholderPassword = await hashPassword(randomBytes(32).toString("hex"));
+
+        try {
+          user = await storage.createUser({
+            username,
+            password: placeholderPassword,
+            name: `Customer`,
+            email: null,
+            phone: formattedPhone,
+            role: UserRole.CUSTOMER,
+            isActive: true,
+          });
+          isNewUser = true;
+        } catch (createErr: any) {
+          // If a race condition occurred and the user was created concurrently, look them up again
+          user = await storage.getUserByPhone(formattedPhone);
+          if (!user) {
+            throw createErr;
+          }
+        }
       }
+
+      console.log(`[OTP Auth] Existing user: ${!isNewUser}`);
+      console.log(`[OTP Auth] New customer created: ${isNewUser}`);
 
       const userId = user.id || (user as any).uid;
       if (!userId) {
@@ -198,14 +214,16 @@ export function setupAuth(app: Express) {
             console.error("OTP session save error:", saveErr);
             return res.status(500).json({ success: false, message: "Session error. Please try again." });
           }
+          console.log("[OTP Auth] Session established");
           console.log("OTP login successful for user:", userId, formattedPhone);
           res.json({
             success: true,
             authenticated: true,
+            isNewUser,
             user: {
               id: userId,
               phone: user.phone,
-              role: user.role
+              role: user.role === UserRole.CUSTOMER ? "customer" : (user.role ? user.role.toLowerCase() : "customer")
             }
           });
         });
@@ -233,22 +251,37 @@ export function setupAuth(app: Express) {
       }
 
       const formattedPhone = normalizePhone(phone);
-      const user = await storage.getUserByPhone(formattedPhone);
+      let user = await storage.getUserByPhone(formattedPhone);
+      let isNewUser = false;
 
-      console.log("[OTP Login] Looking up user", {
-        phoneNormalized: formattedPhone,
-        userSource: "PostgreSQL Database",
-        found: !!user,
-        userId: user?.id || (user as any)?.uid || null,
-        role: user?.role || null
-      });
+      console.log("[OTP Auth] Verification approved");
 
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "No user account is linked to this phone number."
-        });
+        const randomSuffix = randomBytes(4).toString("hex");
+        const username = `phone_${formattedPhone.replace("+", "")}_${randomSuffix}`;
+        const placeholderPassword = await hashPassword(randomBytes(32).toString("hex"));
+
+        try {
+          user = await storage.createUser({
+            username,
+            password: placeholderPassword,
+            name: `Customer`,
+            email: null,
+            phone: formattedPhone,
+            role: UserRole.CUSTOMER,
+            isActive: true,
+          });
+          isNewUser = true;
+        } catch (createErr: any) {
+          user = await storage.getUserByPhone(formattedPhone);
+          if (!user) {
+            throw createErr;
+          }
+        }
       }
+
+      console.log(`[OTP Auth] Existing user: ${!isNewUser}`);
+      console.log(`[OTP Auth] New customer created: ${isNewUser}`);
 
       const userId = user.id || (user as any).uid;
       if (!userId) {
@@ -268,14 +301,16 @@ export function setupAuth(app: Express) {
             console.error("Internal session save error:", saveErr);
             return res.status(500).json({ success: false, message: "Session error." });
           }
+          console.log("[OTP Auth] Session established");
           console.log("Internal login successful for user:", userId, formattedPhone);
           res.json({
             success: true,
             authenticated: true,
+            isNewUser,
             user: {
               id: userId,
               phone: user.phone,
-              role: user.role
+              role: user.role === UserRole.CUSTOMER ? "customer" : (user.role ? user.role.toLowerCase() : "customer")
             }
           });
         });
