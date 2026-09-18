@@ -277,6 +277,38 @@ export function setupAuth(app: Express) {
     res.json(sanitizeUser(req.user!));
   });
 
+  app.post("/api/log-diagnostic", (req, res) => {
+    try {
+      const { level, message, data } = req.body;
+      const cleanData = JSON.parse(JSON.stringify(data || {}));
+      
+      const redact = (obj: any) => {
+        for (const key in obj) {
+          if (typeof obj[key] === "object" && obj[key] !== null) {
+            redact(obj[key]);
+          } else if (typeof key === "string" && /code|otp|secret|token|password|auth|key/i.test(key)) {
+            obj[key] = "[REDACTED]";
+          }
+        }
+      };
+      redact(cleanData);
+
+      const levelStr = String(level || "info").toUpperCase();
+      const outputMsg = `[Client-Diagnostic] [${levelStr}] ${message}`;
+      
+      if (level === "error") {
+        console.error(outputMsg, cleanData);
+      } else if (level === "warn") {
+        console.warn(outputMsg, cleanData);
+      } else {
+        console.log(outputMsg, cleanData);
+      }
+    } catch (e) {
+      console.warn("Error processing client diagnostic log request:", e);
+    }
+    res.json({ success: true });
+  });
+
   app.get("/api/otp-health", (req, res) => {
     res.json({
       working: true,

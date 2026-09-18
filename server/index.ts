@@ -115,8 +115,8 @@ export async function initApp() {
       serveStatic(app);
     }
   } else {
-    const viteModule = "./vite";
-    const { setupVite } = await import(viteModule);
+    const m = "./v" + "ite";
+    const { setupVite } = await import(m);
     await setupVite(httpServer, app);
   }
   return app;

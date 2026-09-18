@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { InsertUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { sendOtpWithLogging, verifyOtpWithLogging } from "@/lib/auth-service";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -78,37 +79,13 @@ export function useAuth() {
 
   const sendOtpMutation = useMutation({
     mutationFn: async (phone: string) => {
-      const res = await fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw {
-          message: data.message || "Failed to send OTP via SMS",
-          code: data.code,
-        };
-      }
-      return data;
+      return await sendOtpWithLogging(phone);
     },
   });
 
   const verifyOtpMutation = useMutation({
     mutationFn: async ({ phone, code }: { phone: string; code: string }) => {
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code }),
-        credentials: "include",
-      });
-      
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || "Invalid OTP code");
-      }
-      return data;
+      return await verifyOtpWithLogging(phone, code);
     },
     onSuccess: (data) => {
       queryClient.setQueryData([api.auth.me.path], data.user);
