@@ -26,8 +26,11 @@ app.use(express.urlencoded({ extended: false }));
 // Normalize Netlify serverless functions prefix for routing
 app.use((req, res, next) => {
   if (req.url.startsWith("/.netlify/functions/api")) {
-    req.url = req.url.substring("/.netlify/functions/api".length);
+    req.url = "/api" + req.url.substring("/.netlify/functions/api".length);
+  } else if (req.url.startsWith("/.netlify/functions/")) {
+    req.url = "/" + req.url.substring("/.netlify/functions/".length);
   }
+  // Guarantee leading slash
   if (!req.url.startsWith("/")) {
     req.url = "/" + req.url;
   }

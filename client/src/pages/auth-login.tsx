@@ -49,7 +49,7 @@ export default function LoginPage() {
         setLocation(redirectUrl);
       } else {
         const role = user.role?.toUpperCase();
-        if (role === "CUSTOMER") setLocation("/account/overview");
+        if (role === "CUSTOMER") setLocation("/");
         else if (role === "DELIVERY_MAN") setLocation("/delivery/dashboard");
         else if (role === "GATE_KEEPER") setLocation("/gatekeeper/dashboard");
         else if (role === "ACCOUNTANT") setLocation("/accountant/dashboard");
