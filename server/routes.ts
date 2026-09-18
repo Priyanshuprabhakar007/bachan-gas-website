@@ -2088,7 +2088,10 @@ export async function registerRoutes(
     }
   });
 
-  seedDatabase().catch(console.error);
+  const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
+  if (!isNetlify) {
+    seedDatabase().catch(console.error);
+  }
 
   return httpServer;
 }

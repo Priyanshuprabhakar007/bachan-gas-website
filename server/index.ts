@@ -109,11 +109,11 @@ export async function initApp() {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "production") {
-    const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
-    if (!isNetlify) {
-      serveStatic(app);
-    }
+  const isNetlify = process.env.NETLIFY === "true" || process.env.LAMBDA_TASK_ROOT !== undefined;
+  if (isNetlify) {
+    // Under Netlify serverless context, absolutely do NOT load Vite or serveStatic.
+  } else if (process.env.NODE_ENV === "production") {
+    serveStatic(app);
   } else {
     const m = "./v" + "ite";
     const { setupVite } = await import(m);

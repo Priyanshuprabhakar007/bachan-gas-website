@@ -318,6 +318,21 @@ export function setupAuth(app: Express) {
     });
   });
 
+  app.get("/api/health", (req, res) => {
+    const hasDb = Boolean(process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("@host:"));
+    const hasTwilio = Boolean(
+      process.env.TWILIO_ACCOUNT_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_ACCOUNT_SID) &&
+      process.env.TWILIO_AUTH_TOKEN?.trim() && !isPlaceholderCredential(process.env.TWILIO_AUTH_TOKEN) &&
+      process.env.TWILIO_VERIFY_SERVICE_SID?.trim() && !isPlaceholderCredential(process.env.TWILIO_VERIFY_SERVICE_SID)
+    );
+    res.json({
+      success: true,
+      environment: "production",
+      databaseConfigured: hasDb,
+      twilioConfigured: hasTwilio
+    });
+  });
+
   app.get("/api/auth/otp-health", (req, res) => {
     res.json({
       working: true,
