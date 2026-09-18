@@ -1,5 +1,5 @@
 
-import { db } from "./db";
+import { db, isMock } from "./db";
 import { 
   users, products, orders, orderItems, stores, inventory, gatePasses, serviceTickets,
   roles, permissions, rolePermissions, orderStatusLogs, stockMovements, categories,
@@ -1228,5 +1228,5 @@ export class DatabaseStorage implements IStorage {
 import { MemStorage } from "./memStorage";
 export { MemStorage };
 
-export const storage: IStorage = new DatabaseStorage();
+export const storage: IStorage = isMock ? new MemStorage() : new DatabaseStorage();
 

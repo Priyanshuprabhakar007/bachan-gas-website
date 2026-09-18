@@ -7,6 +7,7 @@ const { Pool } = pg;
 
 let pool: any;
 let db: any;
+let isMock = false;
 
 try {
   if (process.env.SQL_HOST) {
@@ -31,6 +32,8 @@ try {
     throw new Error("No database configuration found (neither SQL_HOST nor DATABASE_URL)");
   }
 } catch (e: any) {
+  isMock = true;
+  console.error("[AI Studio] PostgreSQL initialization failed:", e);
   console.warn("[AI Studio] PostgreSQL not connected — using mock/in-memory data layer fallback");
   pool = {
     query: async () => ({ rows: [] }),
@@ -71,5 +74,5 @@ try {
   });
 }
 
-export { pool, db };
+export { pool, db, isMock };
 
