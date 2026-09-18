@@ -47,6 +47,7 @@ export function getDb(): Firestore {
     const databaseId = config.firestoreDatabaseId || "(default)";
     firestoreDb = initializeFirestore(app, {
       experimentalForceLongPolling: true,
+      useFetchStreams: false,
     }, databaseId);
   }
   return firestoreDb;

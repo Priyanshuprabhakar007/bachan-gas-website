@@ -91,25 +91,31 @@ export function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: any, done) => {
     try {
-      const userId = Number(id);
-      if (isNaN(userId)) {
-        console.error("[Auth] deserializeUser received invalid NaN id", { id, type: typeof id });
+      console.log("[Passport] deserializeUser", {
+        id,
+        idType: typeof id
+      });
+
+      const parsedId = Number(id);
+      if (isNaN(parsedId)) {
+        console.error("[Passport] deserializeUser received invalid NaN id", { id });
         return done(null, false);
       }
 
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(parsedId);
+
+      console.log("[Passport] deserialize result", {
+        found: !!user,
+        userId: user?.id ?? null
+      });
 
       if (!user) {
-        console.error("[Auth] deserializeUser user not found", {
-          idType: typeof id,
-          id
-        });
-
         return done(null, false);
       }
 
       return done(null, user);
     } catch (error) {
+      console.error("[Passport] deserialize error", error);
       return done(error);
     }
   });
@@ -224,51 +230,36 @@ export function setupAuth(app: Express) {
 
       const userId = user.id;
 
-      req.logIn(user, (loginErr: any) => {
-        if (loginErr) {
-          console.error("OTP login session error:", loginErr);
-          return res.status(500).json({
-            success: false,
-            message: "Could not create login session."
-          });
+      await new Promise<void>((resolve, reject) => {
+        req.logIn(user, (err: any) => (err ? reject(err) : resolve()));
+      });
+
+      console.log("[OTP Auth] Login completed", {
+        authenticated: req.isAuthenticated(),
+        hasUser: !!req.user,
+        userId: req.user?.id ?? null,
+        passportUser: req.session?.passport?.user ?? null
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => (err ? reject(err) : resolve()));
+      });
+
+      console.log("[OTP Auth] Session persisted", {
+        sessionID: req.sessionID,
+        authenticated: req.isAuthenticated(),
+        passportUser: req.session?.passport?.user ?? null
+      });
+
+      return res.status(200).json({
+        success: true,
+        authenticated: true,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          role: user.role,
+          name: user.name || null
         }
-
-        console.log("[OTP Auth] After req.logIn", {
-          authenticated: req.isAuthenticated(),
-          hasUser: !!req.user,
-          userId: req.user?.id ?? null,
-          sessionID: req.sessionID ?? null,
-          passportUser: req.session?.passport?.user ?? null
-        });
-
-        req.session.save((saveErr: any) => {
-          if (saveErr) {
-            console.error("OTP session save error:", saveErr);
-            return res.status(500).json({
-              success: false,
-              message: "Could not save login session."
-            });
-          }
-
-          console.log("[OTP Auth] Session saved", {
-            sessionID: req.sessionID,
-            authenticated: req.isAuthenticated(),
-            hasUser: !!req.user,
-            userId: req.user?.id || null,
-            passportUser: req.session?.passport?.user ?? null
-          });
-
-          return res.status(200).json({
-            success: true,
-            authenticated: true,
-            user: {
-              id: user.id,
-              phone: user.phone,
-              role: user.role,
-              name: user.name || null
-            }
-          });
-        });
       });
     } catch (err: any) {
       console.error("verify-otp error:", err);
@@ -346,51 +337,36 @@ export function setupAuth(app: Express) {
 
       const userId = user.id;
 
-      req.logIn(user, (loginErr: any) => {
-        if (loginErr) {
-          console.error("Internal login session error:", loginErr);
-          return res.status(500).json({
-            success: false,
-            message: "Could not create login session."
-          });
+      await new Promise<void>((resolve, reject) => {
+        req.logIn(user, (err: any) => (err ? reject(err) : resolve()));
+      });
+
+      console.log("[OTP Auth] Login completed", {
+        authenticated: req.isAuthenticated(),
+        hasUser: !!req.user,
+        userId: req.user?.id ?? null,
+        passportUser: req.session?.passport?.user ?? null
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => (err ? reject(err) : resolve()));
+      });
+
+      console.log("[OTP Auth] Session persisted", {
+        sessionID: req.sessionID,
+        authenticated: req.isAuthenticated(),
+        passportUser: req.session?.passport?.user ?? null
+      });
+
+      return res.status(200).json({
+        success: true,
+        authenticated: true,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          role: user.role,
+          name: user.name || null
         }
-
-        console.log("[OTP Auth] After req.logIn", {
-          authenticated: req.isAuthenticated(),
-          hasUser: !!req.user,
-          userId: req.user?.id ?? null,
-          sessionID: req.sessionID ?? null,
-          passportUser: req.session?.passport?.user ?? null
-        });
-
-        req.session.save((saveErr: any) => {
-          if (saveErr) {
-            console.error("Internal session save error:", saveErr);
-            return res.status(500).json({
-              success: false,
-              message: "Could not save login session."
-            });
-          }
-
-          console.log("[OTP Auth] Session saved", {
-            sessionID: req.sessionID,
-            authenticated: req.isAuthenticated(),
-            hasUser: !!req.user,
-            userId: req.user?.id || null,
-            passportUser: req.session?.passport?.user ?? null
-          });
-
-          return res.status(200).json({
-            success: true,
-            authenticated: true,
-            user: {
-              id: user.id,
-              phone: user.phone,
-              role: user.role,
-              name: user.name || null
-            }
-          });
-        });
       });
     } catch (err: any) {
       console.error("login-after-verify error:", err);

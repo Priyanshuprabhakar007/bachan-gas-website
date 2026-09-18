@@ -20,8 +20,10 @@ setLogLevel("error");
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 // Use initializeFirestore with experimentalForceLongPolling to bypass WebSocket blocks
+// Disable useFetchStreams to prevent the WebChannel stream/transport issue in v12.19.0
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  useFetchStreams: false,
 }, firebaseConfig.firestoreDatabaseId);
 
 export const storage = getStorage(app, firebaseConfig.storageBucket);
