@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, Firestore, doc, getDoc, setDoc, deleteDoc, getDocFromServer, collection, getDocs } from "firebase/firestore";
+import { initializeFirestore, Firestore, doc, getDoc, setDoc, deleteDoc, getDocFromServer, collection, getDocs } from "firebase/firestore";
 import session from "express-session";
 import fs from "fs";
 import path from "path";
@@ -45,7 +45,9 @@ export function getDb(): Firestore {
   if (!firestoreDb) {
     const app = getFirebaseApp();
     const databaseId = config.firestoreDatabaseId || "(default)";
-    firestoreDb = getFirestore(app, databaseId);
+    firestoreDb = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, databaseId);
   }
   return firestoreDb;
 }

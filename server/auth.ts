@@ -212,6 +212,13 @@ export function setupAuth(app: Express) {
         });
       }
 
+      if (!user) {
+        return res.status(500).json({
+          success: false,
+          message: "Database connection is not configured on Netlify. Please add DATABASE_URL to your Netlify Environment Variables.",
+        });
+      }
+
       req.login(user, (loginErr: any) => {
         if (loginErr) {
           console.error("Internal login session error:", loginErr);
