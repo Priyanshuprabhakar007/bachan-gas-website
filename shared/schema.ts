@@ -427,6 +427,32 @@ export const gatePasses = pgTable("gate_passes", {
 
 export const insertGatePassSchema = createInsertSchema(gatePasses).omit({ id: true, createdAt: true });
 
+// === PAYMENTS ===
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").references(() => orders.id),
+  userId: integer("user_id").references(() => users.id),
+  amount: decimal("amount").notNull(),
+  baseAmount: decimal("base_amount").notNull(),
+  gatewayFee: decimal("gateway_fee").default("0"),
+  currency: text("currency").default("INR"),
+  gateway: text("gateway").default("CCAVENUE"),
+  status: text("status").default("PENDING"),
+  trackingId: text("tracking_id"),
+  bankReference: text("bank_reference"),
+  paymentMode: text("payment_mode"),
+  failureMessage: text("failure_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true, updatedAt: true });
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
 // === SERVICE TICKETS ===
 export const serviceTickets = pgTable("service_tickets", {
   id: serial("id").primaryKey(),
