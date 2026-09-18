@@ -40,10 +40,12 @@ async function comparePasswords(supplied: string, stored: string) {
 export function setupAuth(app: Express) {
   app.set("trust proxy", 1);
 
-  const isSecretConfigured = !!process.env.SESSION_SECRET;
-  console.log(`SESSION_SECRET configured: ${isSecretConfigured}`);
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    throw new Error("SESSION_SECRET is required");
+  }
 
-  const sessionSecret = process.env.SESSION_SECRET || "bachan_gas_secret_key_session_store_2026";
+  console.log("SESSION_SECRET configured: true");
 
   app.use(session({
     name: "bgs.sid",

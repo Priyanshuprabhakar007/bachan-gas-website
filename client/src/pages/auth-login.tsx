@@ -16,7 +16,6 @@ export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("+91");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const isSendingRef = useRef(false);
   const isVerifyingRef = useRef(false);
@@ -92,16 +91,13 @@ export default function LoginPage() {
     isSendingRef.current = true;
     try {
       const data = await triggerSendOtp(e164);
-      setDevOtp(data.devOtp || null);
       setStep("otp");
       setResendCooldown(60);
       setOtp(["", "", "", "", "", ""]);
       setTimeout(() => otpRefs[0].current?.focus(), 100);
       toast({
         title: "OTP Sent",
-        description: data.devOtp
-          ? `Preview code generated: ${data.devOtp}`
-          : "Please check your SMS for the verification code",
+        description: data.message || "Please check your SMS for the verification code",
       });
     } catch (error: any) {
       let errorDesc = error.message || "Failed to send OTP via SMS";
@@ -331,28 +327,6 @@ export default function LoginPage() {
                       ))}
                     </div>
                   </div>
-
-                  {devOtp && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs">
-                      <div>
-                        <span className="text-amber-400 font-medium">Test OTP:</span>{" "}
-                        <span className="font-mono text-sm font-bold text-foreground ml-1 tracking-widest">{devOtp}</span>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 px-2"
-                        onClick={() => {
-                          const digits = devOtp.split("").slice(0, 6);
-                          setOtp(digits);
-                          verifyOtp(devOtp);
-                        }}
-                      >
-                        Auto-fill & Login
-                      </Button>
-                    </div>
-                  )}
 
                   <Button
                     onClick={() => verifyOtp(otp.join(""))}

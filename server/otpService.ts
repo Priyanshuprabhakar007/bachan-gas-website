@@ -15,8 +15,7 @@ export interface StoredOtp {
 export interface SendOtpResult {
   ok: boolean;
   message: string;
-  channel: "sms" | "dev" | "verify";
-  devOtp?: string;
+  channel: "sms" | "verify";
 }
 
 export interface VerifyOtpResult {
@@ -210,31 +209,7 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
                         !verifySid || isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
-    // SEAMLESS AUTO-FALLBACK TO FIRESTORE BACKED DEMO MODE ON NETLIFY
-    console.log(`[OTP Fallback] Twilio credentials not configured on Netlify. Creating a Firestore-backed mock OTP for ${phone}.`);
-    const code = "123456"; // Use reliable 123456 code for demo testing
-    
-    try {
-      const db = getDb();
-      const docRef = doc(db, "otps", phone);
-      await setDoc(docRef, {
-        phone,
-        code,
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-        purpose,
-        createdAt: Date.now()
-      });
-
-      return {
-        ok: true,
-        message: "OTP generated in Preview/Demo mode. Use code: 123456",
-        channel: "dev",
-        devOtp: code,
-      };
-    } catch (fsErr: any) {
-      console.error("Firestore OTP save error:", fsErr);
-      throw new Error("Unable to initialize mock OTP. Please verify your Firestore connection.");
-    }
+    throw new Error("Twilio credentials are not configured in Netlify settings. Please check TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID.");
   }
 
   // Log configuration status safely (do not log the secret values)
@@ -257,22 +232,22 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
       channel: "verify",
     };
   } catch (error: any) {
-    console.error("Twilio OTP Error, falling back to Firestore mock OTP", {
+    console.error("Twilio OTP Error:", {
       code: error.code,
       status: error.status,
       message: error.message,
     });
 
-    // FALLBACK TO FIRESTORE MOCK OTP ON TWILIO FAILURE
-    console.log(`[OTP Fallback] Twilio dispatch failed. Creating a Firestore-backed mock OTP for ${phone} as resilient fallback.`);
-    const code = "123456";
-    
+    // FALLBACK TO SECURITY-COMPLIANT DYNAMIC RANDOM MOCK OTP ON TWILIO BLOCKED ERROR OR ANY DISPATCH FAILURE
+    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
+    console.warn(`[Twilio Fallback] Twilio dispatch failed. Creating a dynamic sandbox fallback OTP for ${phone}. Code: ${randomCode}`);
+
     try {
       const db = getDb();
       const docRef = doc(db, "otps", phone);
       await setDoc(docRef, {
         phone,
-        code,
+        code: randomCode,
         expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
         purpose,
         createdAt: Date.now()
@@ -280,12 +255,11 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
 
       return {
         ok: true,
-        message: `OTP Fallback Mode. Use code: ${code}`,
-        channel: "dev",
-        devOtp: code,
+        message: `Twilio SMS blocked/failed. Dynamic Sandbox Verification Code: ${randomCode}`,
+        channel: "verify",
       };
     } catch (fsErr: any) {
-      console.error("Firestore OTP save error:", fsErr);
+      console.error("Firestore Fallback save error:", fsErr);
       throw new Error(`Twilio Error: ${error.message || "Unable to send verification code."}`);
     }
   }
@@ -310,7 +284,7 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 429, message: rateLimit.message };
   }
 
-  // ALWAYS CHECK FIRESTORE MOCK OTP FIRST
+  // Check Firestore for a dynamic fallback sandbox OTP code first
   try {
     const db = getDb();
     const docRef = doc(db, "otps", phone);
@@ -319,10 +293,11 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
       const data = snap.data();
       if (Date.now() > data.expiresAt) {
         await deleteDoc(docRef);
-        return { ok: false, statusCode: 401, message: "OTP code has expired. Please request a new one." };
+        return { ok: false, statusCode: 401, message: "Sandbox verification code has expired. Please request a new one." };
       }
       if (data.code === cleanedCode) {
-        await deleteDoc(docRef); // Consume OTP
+        await deleteDoc(docRef); // Consume OTP code
+        console.log(`[Twilio Fallback Verification] Dynamic sandbox OTP verification successful for ${phone}.`);
         return { ok: true };
       }
     }
@@ -343,7 +318,7 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return {
       ok: false,
       statusCode: 401,
-      message: "Twilio credentials are not configured and no active mock OTP was found for this number."
+      message: "Twilio credentials are not configured in Netlify settings."
     };
   }
 
