@@ -76,19 +76,11 @@ export function setupAuth(app: Express) {
   );
 
   passport.serializeUser((user: any, done) => {
-    if (!user) {
-      return done(new Error("serializeUser received no user"));
+    if (!user?.id) {
+      return done(new Error("Cannot serialize user without id"));
     }
 
-    const userId = user.id || user.uid;
-
-    if (!userId) {
-      return done(
-        new Error("serializeUser received a user without id/uid")
-      );
-    }
-
-    done(null, userId);
+    done(null, user.id);
   });
 
   passport.deserializeUser(async (id: any, done) => {
@@ -196,13 +188,26 @@ export function setupAuth(app: Express) {
       console.log(`[OTP Auth] Existing user: ${!isNewUser}`);
       console.log(`[OTP Auth] New customer created: ${isNewUser}`);
 
-      const userId = user.id || (user as any).uid;
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: "The authenticated user is invalid (lacks an id or uid)."
-        });
+      console.log("[OTP Auth] User after lookup/create:", {
+        exists: !!user,
+        id: user?.id ?? null,
+        phone: user?.phone ?? null,
+        role: user?.role ?? null
+      });
+
+      if (!user) {
+        throw new Error(
+          "User creation succeeded but no user object was returned"
+        );
       }
+
+      if (!user.id) {
+        throw new Error(
+          "User object exists but does not contain an id"
+        );
+      }
+
+      const userId = user.id;
 
       req.login(user, (loginErr: any) => {
         if (loginErr) {
@@ -283,13 +288,26 @@ export function setupAuth(app: Express) {
       console.log(`[OTP Auth] Existing user: ${!isNewUser}`);
       console.log(`[OTP Auth] New customer created: ${isNewUser}`);
 
-      const userId = user.id || (user as any).uid;
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: "The authenticated user is invalid (lacks an id or uid)."
-        });
+      console.log("[OTP Auth] User after lookup/create:", {
+        exists: !!user,
+        id: user?.id ?? null,
+        phone: user?.phone ?? null,
+        role: user?.role ?? null
+      });
+
+      if (!user) {
+        throw new Error(
+          "User creation succeeded but no user object was returned"
+        );
       }
+
+      if (!user.id) {
+        throw new Error(
+          "User object exists but does not contain an id"
+        );
+      }
+
+      const userId = user.id;
 
       req.login(user, (loginErr: any) => {
         if (loginErr) {

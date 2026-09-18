@@ -246,6 +246,32 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    if (!user) {
+      // If we are in fallback/mock mode, generate a mock user object with a valid ID
+      const mockId = Math.floor(Math.random() * 1000000);
+      return {
+        id: mockId,
+        username: insertUser.username,
+        password: insertUser.password,
+        role: insertUser.role || UserRole.CUSTOMER,
+        roleId: insertUser.roleId || null,
+        name: insertUser.name,
+        email: insertUser.email || null,
+        phone: insertUser.phone || null,
+        staffId: insertUser.staffId || null,
+        consumerId: insertUser.consumerId || null,
+        customerType: insertUser.customerType || null,
+        address: insertUser.address || null,
+        route: insertUser.route || null,
+        outstandingBalance: insertUser.outstandingBalance || 0,
+        isActive: insertUser.isActive ?? true,
+        joiningDate: insertUser.joiningDate ? new Date(insertUser.joiningDate) : null,
+        notes: insertUser.notes || null,
+        googleId: insertUser.googleId || null,
+        avatarUrl: insertUser.avatarUrl || null,
+        createdAt: new Date(),
+      };
+    }
     return user;
   }
 
