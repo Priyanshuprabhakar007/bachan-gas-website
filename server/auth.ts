@@ -75,10 +75,32 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
-  passport.deserializeUser(async (id: number, done) => {
+  passport.serializeUser((user: any, done) => {
+    if (!user) {
+      return done(new Error("serializeUser received no user"));
+    }
+
+    const userId = user.id || user.uid;
+
+    if (!userId) {
+      return done(
+        new Error("serializeUser received a user without id/uid")
+      );
+    }
+
+    done(null, userId);
+  });
+
+  passport.deserializeUser(async (id: any, done) => {
     try {
-      const user = await storage.getUser(id);
+      const parsedId = Number(id);
+      if (isNaN(parsedId)) {
+        return done(new Error(`Invalid user ID format in session: ${id}`));
+      }
+      const user = await storage.getUser(parsedId);
+      if (!user) {
+        return done(null, false);
+      }
       done(null, user);
     } catch (err) {
       done(err);
@@ -131,6 +153,8 @@ export function setupAuth(app: Express) {
       const formattedPhone = normalizePhone(phone);
       const verification = await verifyOtp(formattedPhone, code.toString().trim());
 
+      console.log("[OTP Login] Twilio verification status:", verification.ok ? "approved" : "failed");
+
       if (!verification.ok) {
         return res.status(verification.statusCode || 401).json({
           success: false,
@@ -157,6 +181,27 @@ export function setupAuth(app: Express) {
         });
       }
 
+      console.log("[OTP Login] User lookup:", {
+        found: !!user,
+        id: user?.id || (user as any)?.uid,
+        role: user?.role
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "No user account is linked to this phone number."
+        });
+      }
+
+      const userId = user.id || (user as any).uid;
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: "The authenticated user is invalid (lacks an id or uid)."
+        });
+      }
+
       req.login(user, (loginErr: any) => {
         if (loginErr) {
           console.error("OTP login session error:", loginErr);
@@ -167,8 +212,16 @@ export function setupAuth(app: Express) {
             console.error("OTP session save error:", saveErr);
             return res.status(500).json({ success: false, message: "Session error. Please try again." });
           }
-          console.log("OTP login successful for user:", user!.id, formattedPhone);
-          res.json({ ok: true, success: true, user: sanitizeUser(user!) });
+          console.log("OTP login successful for user:", userId, formattedPhone);
+          res.json({
+            success: true,
+            authenticated: true,
+            user: {
+              id: userId,
+              phone: user!.phone,
+              role: user!.role
+            }
+          });
         });
       });
     } catch (err: any) {
@@ -212,10 +265,25 @@ export function setupAuth(app: Express) {
         });
       }
 
+      console.log("[OTP Login] Twilio verification status: approved");
+      console.log("[OTP Login] User lookup:", {
+        found: !!user,
+        id: user?.id || (user as any)?.uid,
+        role: user?.role
+      });
+
       if (!user) {
         return res.status(500).json({
           success: false,
-          message: "Database connection is not configured on Netlify. Please add DATABASE_URL to your Netlify Environment Variables.",
+          message: "Database connection is not configured or user creation failed. Please check your DATABASE_URL configuration.",
+        });
+      }
+
+      const userId = user.id || (user as any).uid;
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: "The authenticated user is invalid (lacks an id or uid)."
         });
       }
 
@@ -229,8 +297,16 @@ export function setupAuth(app: Express) {
             console.error("Internal session save error:", saveErr);
             return res.status(500).json({ success: false, message: "Session error." });
           }
-          console.log("Internal login successful for user:", user!.id, formattedPhone);
-          res.json({ ok: true, success: true, user: sanitizeUser(user!) });
+          console.log("Internal login successful for user:", userId, formattedPhone);
+          res.json({
+            success: true,
+            authenticated: true,
+            user: {
+              id: userId,
+              phone: user!.phone,
+              role: user!.role
+            }
+          });
         });
       });
     } catch (err: any) {

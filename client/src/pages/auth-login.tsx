@@ -135,18 +135,51 @@ export default function LoginPage() {
     isVerifyingRef.current = true;
     try {
       const data = await verifyOTP({ phone: e164, code: otpCode });
-      queryClient.setQueryData(["/api/user"], data.user);
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      if (data.user?.phone) {
-        localStorage.setItem("customer_phone", data.user.phone);
+      
+      if (data && data.success === true && data.authenticated === true) {
+        try {
+          const checkRes = await fetch("/api/user", { credentials: "include" });
+          if (!checkRes.ok) {
+            throw new Error("Backend session validation failed");
+          }
+          const verifiedUser = await checkRes.json();
+          queryClient.setQueryData(["/api/user"], verifiedUser);
+          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+          if (verifiedUser?.phone) {
+            localStorage.setItem("customer_phone", verifiedUser.phone);
+          }
+          toast({ title: "Welcome!", description: "You have been logged in successfully" });
+        } catch (checkErr) {
+          toast({
+            title: "Session Error",
+            description: "Session could not be established securely. Please request a new OTP.",
+            variant: "destructive",
+          });
+          setOtp(["", "", "", "", "", ""]);
+          otpRefs[0].current?.focus();
+          return;
+        }
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: data?.message || "Invalid or already consumed OTP. Please try again.",
+          variant: "destructive",
+        });
+        setOtp(["", "", "", "", "", ""]);
+        otpRefs[0].current?.focus();
       }
-    } catch {
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "OTP verification failed. Please try again.",
+        variant: "destructive",
+      });
       setOtp(["", "", "", "", "", ""]);
       otpRefs[0].current?.focus();
     } finally {
       isVerifyingRef.current = false;
     }
-  }, [phone, verifyOTP]);
+  }, [phone, verifyOTP, toast]);
 
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;

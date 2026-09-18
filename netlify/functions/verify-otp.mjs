@@ -133,6 +133,7 @@ export const handler = async (event, context) => {
       headers: responseHeaders,
       body: JSON.stringify({
         success: true,
+        authenticated: true,
         verified: true,
         user: loginData.user,
       }),
