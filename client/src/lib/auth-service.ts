@@ -1,7 +1,7 @@
+import { resolveUrl } from "./queryClient";
+
 /**
  * Unified authentication logger and service layer.
- * Captures request and response metadata specifically for Netlify debugging of the OTP flow
- * while ensuring sensitive data (such as raw OTP codes) is never logged or leaked.
  */
 
 export interface LogPayload {
@@ -26,7 +26,6 @@ export function sanitizeLogData(data: any): any {
       if (typeof obj[key] === "object" && obj[key] !== null) {
         redact(obj[key]);
       } else if (typeof key === "string" && /code|otp|secret|token|password|auth|key/i.test(key)) {
-        // Only redact if it looks like an actual verification code or credential
         if (key === "code" && typeof obj[key] === "string" && obj[key].length === 6) {
           obj[key] = "[REDACTED_6_DIGIT_OTP]";
         } else if (key === "devOtp" || key === "otp" || key === "password" || key === "secret") {
@@ -41,12 +40,10 @@ export function sanitizeLogData(data: any): any {
 }
 
 /**
- * Sends a diagnostic log payload directly to the Netlify serverless logs
+ * Logs diagnostic information to browser console
  */
 export async function logToNetlifyServer(level: "info" | "warn" | "error", message: string, data?: LogPayload) {
   const sanitized = sanitizeLogData(data);
-  
-  // Log to client-side browser console first
   const consoleMsg = `[AuthService] [${level.toUpperCase()}] ${message}`;
   if (level === "error") {
     console.error(consoleMsg, sanitized);
@@ -55,33 +52,17 @@ export async function logToNetlifyServer(level: "info" | "warn" | "error", messa
   } else {
     console.log(consoleMsg, sanitized);
   }
-
-  // Forward to Netlify backend to ensure it is recorded in cloud environment logs
-  try {
-    await fetch("/api/log-diagnostic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        level,
-        message,
-        data: sanitized
-      })
-    });
-  } catch (err) {
-    // Fail silently so logger does not block app execution
-    console.warn("Failed to transmit diagnostics to server:", err);
-  }
 }
 
 /**
- * Sends OTP with unified Netlify request/response diagnostics
+ * Sends OTP using Cloudflare API base URL resolver
  */
 export async function sendOtpWithLogging(phone: string): Promise<any> {
   const cleanPhone = phone.replace(/\s/g, "");
   await logToNetlifyServer("info", "Initiating OTP send request", { phone: cleanPhone });
 
   try {
-    const res = await fetch("/api/send-otp", {
+    const res = await fetch(resolveUrl("/api/send-otp"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone }),
@@ -116,19 +97,18 @@ export async function sendOtpWithLogging(phone: string): Promise<any> {
 }
 
 /**
- * Verifies OTP with unified Netlify request/response diagnostics
+ * Verifies OTP using Cloudflare API base URL resolver
  */
 export async function verifyOtpWithLogging(phone: string, code: string): Promise<any> {
   const cleanPhone = phone.replace(/\s/g, "");
   
-  // Ensure 'code' is logged as REDACTED inside logToNetlifyServer using sanitization helpers
   await logToNetlifyServer("info", "Initiating OTP verification request", {
     phone: cleanPhone,
-    code: code // Will be redacted
+    code: code
   });
 
   try {
-    const res = await fetch("/api/verify-otp", {
+    const res = await fetch(resolveUrl("/api/verify-otp"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone, code }),

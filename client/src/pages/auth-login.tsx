@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Flame, Loader2, ArrowLeft, Phone, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, resolveUrl } from "@/lib/queryClient";
 
 export default function LoginPage() {
   const { user, sendOtp: triggerSendOtp, isSendingOtp, verifyOTP, isVerifyingOTP } = useAuth();
@@ -134,7 +134,7 @@ export default function LoginPage() {
       
       if (data && data.success === true && data.authenticated === true) {
         try {
-          const checkRes = await fetch("/api/user", { credentials: "include" });
+          const checkRes = await fetch(resolveUrl("/api/user"), { credentials: "include" });
           if (!checkRes.ok) {
             throw new Error("Backend session validation failed");
           }

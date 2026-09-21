@@ -3,6 +3,7 @@ import { api } from "@shared/routes";
 import { InsertUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { sendOtpWithLogging, verifyOtpWithLogging } from "@/lib/auth-service";
+import { resolveUrl } from "@/lib/queryClient";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -11,7 +12,7 @@ export function useAuth() {
   const userQuery = useQuery({
     queryKey: [api.auth.me.path],
     queryFn: async () => {
-      const res = await fetch(api.auth.me.path, { credentials: "include" });
+      const res = await fetch(resolveUrl(api.auth.me.path), { credentials: "include" });
       if (res.status === 401) return null;
       if (!res.ok) throw new Error("Failed to fetch user");
       return api.auth.me.responses[200].parse(await res.json());
@@ -21,7 +22,7 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
-      const res = await fetch(api.auth.login.path, {
+      const res = await fetch(resolveUrl(api.auth.login.path), {
         method: api.auth.login.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
@@ -45,7 +46,7 @@ export function useAuth() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: InsertUser) => {
-      const res = await fetch(api.auth.register.path, {
+      const res = await fetch(resolveUrl(api.auth.register.path), {
         method: api.auth.register.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -68,7 +69,7 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch(api.auth.logout.path, { method: api.auth.logout.method, credentials: "include" });
+      await fetch(resolveUrl(api.auth.logout.path), { method: api.auth.logout.method, credentials: "include" });
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);

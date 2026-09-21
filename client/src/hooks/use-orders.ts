@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { insertOrderSchema } from "@shared/schema";
+import { resolveUrl } from "@/lib/queryClient";
 
 type CreateOrderInput = z.infer<typeof insertOrderSchema> & {
   items: { productId: number; quantity: number }[];
@@ -12,11 +13,10 @@ export function useOrders(phone?: string) {
   return useQuery({
     queryKey: [api.orders.list.path, phone || "all"],
     queryFn: async () => {
-      const res = await fetch(`${api.orders.list.path}${queryParam}`, {
+      const res = await fetch(resolveUrl(`${api.orders.list.path}${queryParam}`), {
         credentials: "include",
       });
       if (res.status === 401) {
-        // If not authenticated, return empty list gracefully
         return [];
       }
       if (!res.ok) throw new Error("Failed to fetch orders");
@@ -29,7 +29,7 @@ export function useOrder(id: number) {
   return useQuery({
     queryKey: [api.orders.get.path, id],
     queryFn: async () => {
-      const res = await fetch(api.orders.get.path.replace(":id", id.toString()), {
+      const res = await fetch(resolveUrl(api.orders.get.path.replace(":id", id.toString())), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch order");
@@ -43,7 +43,7 @@ export function useCreateOrder() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CreateOrderInput) => {
-      const res = await fetch(api.orders.create.path, {
+      const res = await fetch(resolveUrl(api.orders.create.path), {
         method: api.orders.create.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

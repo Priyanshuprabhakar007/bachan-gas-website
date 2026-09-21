@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Package, Pencil } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUpload } from "@/components/image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -82,7 +82,7 @@ export default function ProductsPage() {
     enabled: !!editingProduct,
     queryFn: async () => {
       if (!editingProduct) return [];
-      const res = await fetch(`/api/products/${editingProduct.id}/images`, { credentials: "include" });
+      const res = await fetch(resolveUrl(`/api/products/${editingProduct.id}/images`), { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
