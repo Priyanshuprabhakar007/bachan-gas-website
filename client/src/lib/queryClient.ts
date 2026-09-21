@@ -1,6 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const apiBase = import.meta.env.VITE_API_URL || "";
+const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 export function resolveUrl(url: string) {
   if (url.startsWith("/") && apiBase) {
