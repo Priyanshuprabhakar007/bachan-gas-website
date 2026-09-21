@@ -1226,7 +1226,12 @@ export class DatabaseStorage implements IStorage {
 }
 
 import { MemStorage } from "./memStorage";
-export { MemStorage };
+import { D1Storage } from "./d1Storage";
+export { MemStorage, D1Storage };
 
-export const storage: IStorage = isMock ? new MemStorage() : new DatabaseStorage();
+export let storage: IStorage = isMock ? new MemStorage() : new DatabaseStorage();
+
+export function setGlobalStorage(newStorage: IStorage) {
+  storage = newStorage;
+}
 
