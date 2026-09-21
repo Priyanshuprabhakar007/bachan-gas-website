@@ -1,16 +1,5 @@
 import twilio from "twilio";
-import { randomInt, timingSafeEqual } from "crypto";
 import { getDb } from "./firebase";
-import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
-
-export interface StoredOtp {
-  phone: string;
-  code: string;
-  expiresAt: number;
-  attempts: number;
-  purpose: string;
-  createdAt: number;
-}
 
 export interface SendOtpResult {
   ok: boolean;
@@ -24,23 +13,15 @@ export interface VerifyOtpResult {
   statusCode?: number;
 }
 
-// In-memory store for generated OTPs when using Twilio SMS or Dev mode
-const otpStore = new Map<string, StoredOtp>();
-
 // Rate limits: phone -> { sendCount, verifyCount, windowStart }
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_SEND_PER_WINDOW = 4;
 const MAX_VERIFY_PER_WINDOW = 6;
 const otpLimits = new Map<string, { sendCount: number; verifyCount: number; windowStart: number }>();
 
-// Cleanup expired OTPs every 5 minutes
+// Cleanup expired OTP limits every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, val] of otpStore.entries()) {
-    if (now > val.expiresAt) {
-      otpStore.delete(key);
-    }
-  }
   for (const [phone, limit] of otpLimits.entries()) {
     if (now - limit.windowStart > RATE_LIMIT_WINDOW_MS) {
       otpLimits.delete(phone);
@@ -55,7 +36,6 @@ export function isPlaceholderCredential(val?: string | null): boolean {
   if (!val) return true;
   const cleaned = val.trim();
   if (cleaned.length === 0) return true;
-  // Patterns like ACxxxx... or SKxxxx... or xxxx...
   if (/^([a-zA-Z]{2})?x+$/i.test(cleaned)) return true;
   if (
     cleaned.toLowerCase().includes("replace-with") ||
@@ -67,27 +47,17 @@ export function isPlaceholderCredential(val?: string | null): boolean {
   ) {
     return true;
   }
-  // Twilio Account SID must start with AC and be followed by 32 alphanumeric chars
   if (cleaned.startsWith("AC") && !/^AC[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
-  // Twilio API Key must start with SK and be followed by 32 alphanumeric chars
   if (cleaned.startsWith("SK") && !/^SK[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
-  // Twilio Verify SID must start with VA and be followed by 32 alphanumeric chars
   if (cleaned.startsWith("VA") && !/^VA[0-9a-zA-Z]{32}$/.test(cleaned)) {
     return true;
   }
   return false;
 }
-
-/**
- * Lazy Twilio client initialization to prevent server startup crashes
- * if credentials are unset or invalid.
- */
-let cachedTwilioClient: twilio.Twilio | null = null;
-let lastClientKey = "";
 
 export function getOtpServiceStatus() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
@@ -116,34 +86,21 @@ export function normalizePhone(rawPhone: string): string {
   if (!rawPhone) return "";
   let cleaned = rawPhone.trim().replace(/[^\d+]/g, "");
   
-  // If it already starts with +, return it directly
   if (cleaned.startsWith("+")) {
     return cleaned;
   }
   
   const digits = cleaned.replace(/\D/g, "");
   
-  // 10 digits -> Indian number without country code, prefix with +91
   if (digits.length === 10) {
     return `+91${digits}`;
   }
   
-  // 12 digits starting with 91 -> Indian number with country code but no +, prefix with +
   if (digits.length === 12 && digits.startsWith("91")) {
     return `+${digits}`;
   }
   
-  // For other lengths/cases, prefix with +
   return `+${digits}`;
-}
-
-/**
- * Generates a cryptographically secure 6-digit numeric OTP
- */
-export function generateNumericOtp(length: number = 6): string {
-  const min = Math.pow(10, length - 1);
-  const max = Math.pow(10, length) - 1;
-  return randomInt(min, max + 1).toString();
 }
 
 /**
@@ -184,7 +141,7 @@ function checkRateLimit(phone: string, action: "send" | "verify"): { allowed: bo
 }
 
 /**
- * Sends an OTP to the given phone number using Twilio Verify, Twilio SMS, or Dev fallback
+ * Sends an OTP to the given phone number using Twilio Verify
  */
 export async function sendOtp(rawPhone: string, purpose: string = "login"): Promise<SendOtpResult> {
   const phone = normalizePhone(rawPhone);
@@ -199,7 +156,6 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
     throw err;
   }
 
-  // Validate environment variables strictly
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
@@ -209,64 +165,43 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
                         !verifySid || isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
-    throw new Error("Twilio credentials are not configured in Netlify settings. Please check TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID.");
+    console.error("[Twilio Verify] Configuration missing or invalid", {
+      hasAccountSid: !!accountSid,
+      hasAuthToken: !!authToken,
+      hasVerifySid: !!verifySid,
+      accountSidValid: !isPlaceholderCredential(accountSid),
+      authSidValid: !isPlaceholderCredential(authToken),
+      verifySidValid: !isPlaceholderCredential(verifySid)
+    });
+    throw new Error("Twilio credentials are not configured correctly.");
   }
 
-  // Log configuration status safely (do not log the secret values)
-  console.log("TWILIO_ACCOUNT_SID configured: true");
-  console.log("TWILIO_AUTH_TOKEN configured: true");
-  console.log("TWILIO_VERIFY_SERVICE_SID configured: true");
-
-  console.log(`[Twilio OTP] Sending Verify OTP to ${phone} via service ${verifySid!.substring(0, 6)}...`);
-
   try {
+    console.log(`[Twilio Verify] Sending verification to ${phone} using service ${verifySid!.substring(0, 4)}...`);
     const client = twilio(accountSid, authToken);
     await client.verify.v2.services(verifySid!).verifications.create({
       to: phone,
       channel: "sms",
     });
-
+    console.log(`[Twilio Verify] Verification sent successfully to ${phone}`);
     return {
       ok: true,
       message: "OTP sent to your phone via SMS",
       channel: "verify",
     };
   } catch (error: any) {
-    console.error("Twilio OTP Error:", {
+    console.error("[Twilio Verify]", {
       code: error.code,
       status: error.status,
       message: error.message,
     });
 
-    // FALLBACK TO SECURITY-COMPLIANT DYNAMIC RANDOM MOCK OTP ON TWILIO BLOCKED ERROR OR ANY DISPATCH FAILURE
-    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
-    console.warn(`[Twilio Fallback] Twilio dispatch failed. Creating a dynamic sandbox fallback OTP for ${phone}. Code: ${randomCode}`);
-
-    try {
-      const db = getDb();
-      const docRef = doc(db, "otps", phone);
-      await setDoc(docRef, {
-        phone,
-        code: randomCode,
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-        purpose,
-        createdAt: Date.now()
-      });
-
-      return {
-        ok: true,
-        message: `Twilio SMS blocked/failed. Dynamic Sandbox Verification Code: ${randomCode}`,
-        channel: "verify",
-      };
-    } catch (fsErr: any) {
-      console.error("Firestore Fallback save error:", fsErr);
-      throw new Error(`Twilio Error: ${error.message || "Unable to send verification code."}`);
-    }
+    throw new Error(`Unable to send verification code. Please try again.`);
   }
 }
 
 /**
- * Verifies an OTP code for a given phone number
+ * Verifies an OTP code for a given phone number using Twilio Verify
  */
 export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyOtpResult> {
   const phone = normalizePhone(rawPhone);
@@ -276,7 +211,7 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 400, message: "Invalid phone number format" };
   }
   if (!/^\d{6}$/.test(cleanedCode)) {
-    return { ok: false, statusCode: 400, message: "Invalid OTP code. Please enter the 6-digit code." };
+    return { ok: false, statusCode: 400, message: "Invalid OTP code." };
   }
 
   const rateLimit = checkRateLimit(phone, "verify");
@@ -284,28 +219,6 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 429, message: rateLimit.message };
   }
 
-  // Check Firestore for a dynamic fallback sandbox OTP code first
-  try {
-    const db = getDb();
-    const docRef = doc(db, "otps", phone);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (Date.now() > data.expiresAt) {
-        await deleteDoc(docRef);
-        return { ok: false, statusCode: 401, message: "Sandbox verification code has expired. Please request a new one." };
-      }
-      if (data.code === cleanedCode) {
-        await deleteDoc(docRef); // Consume OTP code
-        console.log(`[Twilio Fallback Verification] Dynamic sandbox OTP verification successful for ${phone}.`);
-        return { ok: true };
-      }
-    }
-  } catch (fsErr) {
-    console.warn("Firestore OTP lookup warning (ignoring and proceeding to Twilio):", fsErr);
-  }
-
-  // Validate environment variables strictly
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
@@ -315,18 +228,23 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
                         !verifySid || isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
+    console.error("[Twilio Verify] Configuration missing or invalid", {
+      hasAccountSid: !!accountSid,
+      hasAuthToken: !!authToken,
+      hasVerifySid: !!verifySid,
+      accountSidValid: !isPlaceholderCredential(accountSid),
+      authSidValid: !isPlaceholderCredential(authToken),
+      verifySidValid: !isPlaceholderCredential(verifySid)
+    });
     return {
       ok: false,
       statusCode: 401,
-      message: "Twilio credentials are not configured in Netlify settings."
+      message: "Twilio credentials are not configured correctly."
     };
   }
 
-  console.log("TWILIO_ACCOUNT_SID configured: true");
-  console.log("TWILIO_AUTH_TOKEN configured: true");
-  console.log("TWILIO_VERIFY_SERVICE_SID configured: true");
-
   try {
+    console.log(`[Twilio Verify] Checking verification for ${phone} using service ${verifySid!.substring(0, 4)}...`);
     const client = twilio(accountSid, authToken);
     const check = await client.verify.v2
       .services(verifySid!)
@@ -335,6 +253,10 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
         code: cleanedCode,
       });
 
+    console.log("[OTP Login] Twilio verification status:", {
+      status: check.status
+    });
+
     if (check.status === "approved") {
       return { ok: true };
     }
@@ -342,19 +264,19 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { 
       ok: false, 
       statusCode: 401, 
-      message: "Incorrect OTP code. Please check and try again." 
+      message: "Invalid or expired verification code. Please request a new OTP." 
     };
   } catch (error: any) {
-    console.error("Twilio OTP Error", {
+    console.error("[Twilio Verify]", {
       code: error.code,
       status: error.status,
       message: error.message,
     });
-
+    
     return {
       ok: false,
       statusCode: error.status || 400,
-      message: error.message || "Verification check failed",
+      message: "Verification check failed. Please try again.",
     };
   }
 }
