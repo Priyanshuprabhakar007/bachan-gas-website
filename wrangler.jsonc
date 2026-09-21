@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bachan-gar-api",
   "main": "server/worker.ts",
-  "compatibility_date": "2024-09-23",
+  "compatibility_date": "2026-09-21",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "bachan-gas-db",
-      "database_id": "bachan-gas-db-id"
+      "database_id": "1ce5946b-e274-487a-86a4-19bb51d6bfe1"
     }
   ],
   "r2_buckets": [
