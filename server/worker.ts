@@ -1,4 +1,4 @@
-import { D1Storage, setGlobalStorage } from "./storage";
+import { D1Storage } from "./d1Storage";
 import { verifyOtp, sendOtp, getOtpServiceStatus } from "./otpService";
 import { UserRole } from "../shared/schema";
 
@@ -36,22 +36,12 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Bind env variables to process.env for services reading process.env
-    if (env) {
-      for (const [k, v] of Object.entries(env)) {
-        if (typeof v === "string") {
-          process.env[k] = v;
-        }
-      }
-    }
-
     // Initialize D1 Storage for this request
     if (!env.DB) {
       return errorResponse("Cloudflare D1 Database binding 'DB' is missing", 500);
     }
 
     const storage = new D1Storage(env.DB);
-    setGlobalStorage(storage);
 
     const url = new URL(request.url);
     const path = url.pathname;
@@ -71,9 +61,9 @@ export default {
         const r2Ok = !!env.ASSETS;
         const twilioOk = getOtpServiceStatus(env).configured;
         const ccavenueOk = !!(
-          process.env.CCAVENUE_MERCHANT_ID &&
-          process.env.CCAVENUE_ACCESS_CODE &&
-          process.env.CCAVENUE_WORKING_KEY
+          env.CCAVENUE_MERCHANT_ID &&
+          env.CCAVENUE_ACCESS_CODE &&
+          env.CCAVENUE_WORKING_KEY
         );
 
         return jsonResponse({

@@ -1,4 +1,4 @@
-import type { IStorage } from "./storage";
+import type { IStorage } from "./storageTypes";
 import { 
   type User, type InsertUser, type Product, type InsertProduct, type Order, 
   type Store, type InsertStore, type Inventory, type InsertInventory, 

@@ -45,9 +45,9 @@ export function isPlaceholderCredential(val?: string | null): boolean {
 }
 
 function getTwilioCredentials(env?: any) {
-  const accountSid = (env?.TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID)?.trim();
-  const authToken = (env?.TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN)?.trim();
-  const verifySid = (env?.TWILIO_VERIFY_SERVICE_SID || process.env.TWILIO_VERIFY_SERVICE_SID)?.trim();
+  const accountSid = (env?.TWILIO_ACCOUNT_SID ?? (typeof process !== "undefined" ? process.env?.TWILIO_ACCOUNT_SID : undefined))?.trim();
+  const authToken = (env?.TWILIO_AUTH_TOKEN ?? (typeof process !== "undefined" ? process.env?.TWILIO_AUTH_TOKEN : undefined))?.trim();
+  const verifySid = (env?.TWILIO_VERIFY_SERVICE_SID ?? (typeof process !== "undefined" ? process.env?.TWILIO_VERIFY_SERVICE_SID : undefined))?.trim();
   const db = env?.DB;
 
   return { accountSid, authToken, verifySid, db };
