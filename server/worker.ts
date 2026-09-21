@@ -8,37 +8,58 @@ interface Env {
   [key: string]: any;
 }
 
-// CORS headers for API requests
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-};
+function getCorsHeaders(request: Request, env: Env): HeadersInit {
+  const origin = request.headers.get("Origin") || "";
+  let allowedOrigin = origin;
+  const frontendUrl = env?.FRONTEND_URL || "";
+  if (frontendUrl && origin && origin !== frontendUrl) {
+    if (
+      origin.endsWith(".netlify.app") ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      origin.includes("run.app") ||
+      origin.includes("ai.studio")
+    ) {
+      allowedOrigin = origin;
+    } else {
+      allowedOrigin = frontendUrl;
+    }
+  } else if (!origin) {
+    allowedOrigin = frontendUrl || "*";
+  }
 
-function jsonResponse(data: any, status = 200) {
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin || origin || "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  };
+}
+
+function jsonResponse(data: any, status = 200, request: Request, env: Env) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
-      ...corsHeaders,
+      ...getCorsHeaders(request, env),
     },
   });
 }
 
-function errorResponse(message: string, status = 400, details?: any) {
-  return jsonResponse({ message, ...(details ? { error: details } : {}) }, status);
+function errorResponse(message: string, status = 400, details?: any, request: Request, env: Env) {
+  return jsonResponse({ message, ...(details ? { error: details } : {}) }, status, request, env);
 }
 
 export default {
   async fetch(request: Request, env: Env, _ctx: any): Promise<Response> {
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return new Response(null, { status: 204, headers: getCorsHeaders(request, env) });
     }
 
     // Initialize D1 Storage for this request
     if (!env.DB) {
-      return errorResponse("Cloudflare D1 Database binding 'DB' is missing", 500);
+      return errorResponse("Cloudflare D1 Database binding 'DB' is missing", 500, undefined, request, env);
     }
 
     const storage = new D1Storage(env.DB);
@@ -72,23 +93,25 @@ export default {
           r2: r2Ok,
           twilioConfigured: twilioOk,
           ccavenueConfigured: ccavenueOk,
-        });
+        }, 200, request, env);
       }
 
       // === MEDIA / ASSET SERVING FROM R2 ===
       if ((path.startsWith("/media/") || path.startsWith("/uploads/")) && method === "GET") {
         if (!env.ASSETS) {
-          return errorResponse("R2 Bucket binding 'ASSETS' is not configured", 500);
+          return errorResponse("R2 Bucket binding 'ASSETS' is not configured", 500, undefined, request, env);
         }
         const key = path.replace(/^\/(media|uploads)\//, "");
         const object = await env.ASSETS.get(key);
 
         if (!object) {
-          return new Response("Asset not found", { status: 404, headers: corsHeaders });
+          return new Response("Asset not found", { status: 404, headers: getCorsHeaders(request, env) });
         }
 
         const headers = new Headers();
-        headers.set("Access-Control-Allow-Origin", "*");
+        const origin = request.headers.get("Origin") || "*";
+        headers.set("Access-Control-Allow-Origin", origin);
+        headers.set("Access-Control-Allow-Credentials", "true");
         headers.set("Cache-Control", "public, max-age=31536000, immutable");
         headers.set("Content-Type", object.httpMetadata?.contentType || "image/png");
 
@@ -98,7 +121,7 @@ export default {
       // === R2 IMAGE UPLOAD ===
       if (path === "/api/admin/upload" && method === "POST") {
         if (!env.ASSETS) {
-          return errorResponse("R2 Bucket binding 'ASSETS' is not configured", 500);
+          return errorResponse("R2 Bucket binding 'ASSETS' is not configured", 500, undefined, request, env);
         }
 
         const contentType = request.headers.get("content-type") || "";
@@ -115,7 +138,7 @@ export default {
           const formData = await request.formData();
           const file = formData.get("file") as File | null;
           if (!file) {
-            return errorResponse("No file provided in form data");
+            return errorResponse("No file provided in form data", 400, undefined, request, env);
           }
           buffer = await file.arrayBuffer();
           mimeType = file.type || "image/png";
@@ -125,7 +148,7 @@ export default {
         }
 
         if (buffer.byteLength > 5 * 1024 * 1024) {
-          return errorResponse("File size exceeds 5MB limit");
+          return errorResponse("File size exceeds 5MB limit", 400, undefined, request, env);
         }
 
         const ext = mimeType.split("/")[1] || "png";
@@ -141,69 +164,69 @@ export default {
           success: true,
           key,
           url: publicUrl,
-        }, 201);
+        }, 201, request, env);
       }
 
       // === CATEGORIES ENDPOINTS ===
       if (path === "/api/categories" && method === "GET") {
         const categories = await storage.getCategoriesForHome();
-        return jsonResponse(categories);
+        return jsonResponse(categories, 200, request, env);
       }
 
       if (path === "/api/admin/categories" && method === "GET") {
         const categories = await storage.getCategories();
-        return jsonResponse(categories);
+        return jsonResponse(categories, 200, request, env);
       }
 
       if ((path === "/api/categories" || path === "/api/admin/categories") && method === "POST") {
         const body = await request.json();
         const category = await storage.createCategory(body);
-        return jsonResponse(category, 201);
+        return jsonResponse(category, 201, request, env);
       }
 
       if (path.match(/^\/api\/(admin\/)?categories\/\d+$/) && (method === "PUT" || method === "PATCH")) {
         const id = Number(path.split("/").pop());
         const body = await request.json();
         const category = await storage.updateCategory(id, body);
-        return jsonResponse(category);
+        return jsonResponse(category, 200, request, env);
       }
 
       if (path.match(/^\/api\/(admin\/)?categories\/\d+$/) && method === "DELETE") {
         const id = Number(path.split("/").pop());
         await storage.deleteCategory(id);
-        return new Response(null, { status: 204, headers: corsHeaders });
+        return new Response(null, { status: 204, headers: getCorsHeaders(request, env) });
       }
 
       // === PRODUCTS ENDPOINTS ===
       if (path === "/api/products" && method === "GET") {
         const products = await storage.getProducts();
-        return jsonResponse(products);
+        return jsonResponse(products, 200, request, env);
       }
 
       if (path.match(/^\/api\/products\/\d+$/) && method === "GET") {
         const id = Number(path.split("/").pop());
         const product = await storage.getProduct(id);
-        if (!product) return errorResponse("Product not found", 404);
-        return jsonResponse(product);
+        if (!product) return errorResponse("Product not found", 404, undefined, request, env);
+        return jsonResponse(product, 200, request, env);
       }
 
       if ((path === "/api/products" || path === "/api/admin/products") && method === "POST") {
         const body = await request.json();
         const product = await storage.createProduct(body);
-        return jsonResponse(product, 201);
+        return jsonResponse(product, 201, request, env);
       }
 
       if (path.match(/^\/api\/(admin\/)?products\/\d+$/) && (method === "PUT" || method === "PATCH")) {
         const id = Number(path.split("/").pop());
         const body = await request.json();
         const product = await storage.updateProduct(id, body);
-        return jsonResponse(product);
+        return jsonResponse(product, 200, request, env);
       }
 
       if (path.match(/^\/api\/(admin\/)?products\/\d+$/) && method === "DELETE") {
         const id = Number(path.split("/").pop());
         await storage.deleteProduct(id);
-        return new Response(null, { status: 204, headers: corsHeaders });
+        return new Response(null, { status: 204, headers: getCorsHeaders(request, env) });
       }
 
       // === SETTINGS ENDPOINTS ===
@@ -227,20 +250,20 @@ export default {
             ccavenueRoundingMode: "ROUND_2_DECIMALS",
           } as any;
         }
-        return jsonResponse(settings);
+        return jsonResponse(settings, 200, request, env);
       }
 
       if ((path === "/api/settings" || path === "/api/admin/settings") && (method === "POST" || method === "PATCH" || method === "PUT")) {
         const body = await request.json();
         const settings = await storage.upsertSiteSettings(body);
-        return jsonResponse(settings);
+        return jsonResponse(settings, 200, request, env);
       }
 
       // === OTP AUTHENTICATION & TWILIO VERIFY ===
       if (path === "/api/send-otp" && method === "POST") {
         const body = await request.json();
         const result = await sendOtp(body.phone, body.purpose || "login", env);
-        return jsonResponse(result);
+        return jsonResponse(result, 200, request, env);
       }
 
       if (path === "/api/verify-otp" && method === "POST") {
@@ -249,7 +272,7 @@ export default {
         const result = await verifyOtp(phone, code, env);
 
         if (!result.ok) {
-          return jsonResponse({ success: false, message: result.message || "OTP verification failed" }, result.statusCode || 401);
+          return jsonResponse({ success: false, message: result.message || "OTP verification failed" }, result.statusCode || 401, request, env);
         }
 
         // Retrieve or create customer in D1 database upon successful verification
@@ -276,33 +299,33 @@ export default {
             phone: user.phone,
             role: user.role,
           },
-        });
+        }, 200, request, env);
       }
 
       // === ORDERS ENDPOINTS ===
       if (path === "/api/orders" && method === "GET") {
         const orders = await storage.getOrders();
-        return jsonResponse(orders);
+        return jsonResponse(orders, 200, request, env);
       }
 
       if (path.match(/^\/api\/orders\/\d+$/) && method === "GET") {
         const id = Number(path.split("/").pop());
         const order = await storage.getOrder(id);
-        if (!order) return errorResponse("Order not found", 404);
-        return jsonResponse(order);
+        if (!order) return errorResponse("Order not found", 404, undefined, request, env);
+        return jsonResponse(order, 200, request, env);
       }
 
       if (path === "/api/orders" && method === "POST") {
         const body = await request.json();
         const order = await storage.createOrder(body);
-        return jsonResponse(order, 201);
+        return jsonResponse(order, 201, request, env);
       }
 
       // Unhandled route fallback
-      return errorResponse(`Route '${method} ${path}' not found`, 404);
+      return errorResponse(`Route '${method} ${path}' not found`, 404, undefined, request, env);
     } catch (err: any) {
       console.error("[Worker Error]", path, err);
-      return errorResponse("Internal server error", 500, err.message || String(err));
+      return errorResponse("Internal server error", 500, err.message || String(err), request, env);
     }
   },
 };
