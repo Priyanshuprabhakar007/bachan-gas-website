@@ -93,11 +93,17 @@ export default function CustomerBookRefill() {
     refetchOnMount: true,
   });
 
+  const { data: ccavenueConfig, isLoading: ccavenueConfigLoading } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/payments/ccavenue/config"],
+  });
+  
+  const isCcavenueReady = paymentSettings?.ccavenueEnabled && ccavenueConfig?.configured;
+
   useEffect(() => {
-    if (!paymentSettings?.ccavenueEnabled && paymentMethod === "ONLINE") {
+    if (!isCcavenueReady && paymentMethod === "ONLINE") {
       setPaymentMethod("COD");
     }
-  }, [paymentSettings?.ccavenueEnabled, paymentMethod]);
+  }, [isCcavenueReady, paymentMethod]);
 
   const products = useMemo(() => {
     let filtered =
@@ -670,11 +676,11 @@ export default function CustomerBookRefill() {
                   onClick={() => {
                     if (paymentSettings?.ccavenueEnabled) setPaymentMethod("ONLINE");
                   }}
-                  disabled={paymentSettingsLoading || !paymentSettings?.ccavenueEnabled}
+                  disabled={paymentSettingsLoading || ccavenueConfigLoading || !isCcavenueReady}
                   className={`flex items-center gap-2 p-3 rounded-md border text-left transition-colors ${
-                    paymentSettingsLoading
+                    paymentSettingsLoading || ccavenueConfigLoading
                       ? "border-white/10 text-muted-foreground opacity-60"
-                      : !paymentSettings?.ccavenueEnabled
+                      : !isCcavenueReady
                         ? "border-white/5 text-muted-foreground/40 cursor-not-allowed opacity-50"
                         : paymentMethod === "ONLINE"
                           ? "border-primary bg-primary/10 text-foreground"
@@ -686,7 +692,7 @@ export default function CustomerBookRefill() {
                   <div>
                     <div className="text-sm font-medium">Pay Online</div>
                     <div className="text-xs text-muted-foreground">
-                      {paymentSettingsLoading ? "Loading..." : paymentSettings?.ccavenueEnabled ? "CCAvenue gateway" : "Not available"}
+                      {paymentSettingsLoading || ccavenueConfigLoading ? "Loading..." : isCcavenueReady ? "CCAvenue gateway" : "Not available"}
                     </div>
                   </div>
                 </button>

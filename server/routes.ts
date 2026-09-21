@@ -598,6 +598,10 @@ export async function registerRoutes(
         address: null,
         workingHours: null,
         googleMapsEmbedUrl: null,
+        ccavenueEnabled: false,
+        ccavenueFeeEnabled: true,
+        ccavenueFeePercent: "0.25",
+        ccavenueRoundingMode: "ROUND_2_DECIMALS",
       });
     }
     res.json(settings);
@@ -636,6 +640,12 @@ export async function registerRoutes(
     });
 
     res.status(201).json({ success: true, id: inquiry.id });
+  });
+
+  app.get('/api/payments/ccavenue/config', (_req, res) => {
+    res.json({
+      configured: !!(process.env.CCAVENUE_MERCHANT_ID && process.env.CCAVENUE_ACCESS_CODE && process.env.CCAVENUE_WORKING_KEY),
+    });
   });
 
   // === ADMIN SETTINGS ===
