@@ -1,5 +1,4 @@
 import twilio from "twilio";
-import { getDb } from "./firebase";
 
 export interface SendOtpResult {
   ok: boolean;
@@ -13,21 +12,9 @@ export interface VerifyOtpResult {
   statusCode?: number;
 }
 
-// Rate limits: phone -> { sendCount, verifyCount, windowStart }
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_SEND_PER_WINDOW = 4;
 const MAX_VERIFY_PER_WINDOW = 6;
-const otpLimits = new Map<string, { sendCount: number; verifyCount: number; windowStart: number }>();
-
-// Cleanup expired OTP limits every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [phone, limit] of otpLimits.entries()) {
-    if (now - limit.windowStart > RATE_LIMIT_WINDOW_MS) {
-      otpLimits.delete(phone);
-    }
-  }
-}, 5 * 60 * 1000);
 
 /**
  * Checks if a credential string is empty or contains known placeholder text
@@ -59,10 +46,17 @@ export function isPlaceholderCredential(val?: string | null): boolean {
   return false;
 }
 
-export function getOtpServiceStatus() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
+function getTwilioCredentials(env?: any) {
+  const accountSid = (env?.TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID)?.trim();
+  const authToken = (env?.TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN)?.trim();
+  const verifySid = (env?.TWILIO_VERIFY_SERVICE_SID || process.env.TWILIO_VERIFY_SERVICE_SID)?.trim();
+  const db = env?.DB;
+
+  return { accountSid, authToken, verifySid, db };
+}
+
+export function getOtpServiceStatus(env?: any) {
+  const { accountSid, authToken, verifySid } = getTwilioCredentials(env);
 
   const validAccount = !isPlaceholderCredential(accountSid);
   const validAuthToken = !isPlaceholderCredential(authToken);
@@ -85,84 +79,137 @@ export function getOtpServiceStatus() {
 export function normalizePhone(rawPhone: string): string {
   if (!rawPhone) return "";
   let cleaned = rawPhone.trim().replace(/[^\d+]/g, "");
-  
+
   if (cleaned.startsWith("+")) {
     return cleaned;
   }
-  
+
   const digits = cleaned.replace(/\D/g, "");
-  
+
   if (digits.length === 10) {
     return `+91${digits}`;
   }
-  
+
   if (digits.length === 12 && digits.startsWith("91")) {
     return `+${digits}`;
   }
-  
+
   return `+${digits}`;
 }
 
 /**
- * Checks rate limits for a given phone number
+ * Asynchronously checks and records rate limits for a given phone number using Cloudflare D1
  */
-function checkRateLimit(phone: string, action: "send" | "verify"): { allowed: boolean; message?: string } {
-  const now = Date.now();
-  const record = otpLimits.get(phone);
-
-  if (!record || now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
-    otpLimits.set(phone, {
-      sendCount: action === "send" ? 1 : 0,
-      verifyCount: action === "verify" ? 1 : 0,
-      windowStart: now,
-    });
+async function checkRateLimit(
+  phone: string,
+  action: "send" | "verify",
+  db?: any
+): Promise<{ allowed: boolean; message?: string }> {
+  if (!db) {
     return { allowed: true };
   }
 
-  if (action === "send") {
-    if (record.sendCount >= MAX_SEND_PER_WINDOW) {
-      return {
-        allowed: false,
-        message: "Too many OTP requests. Please wait a few minutes before trying again.",
-      };
-    }
-    record.sendCount += 1;
-  } else {
-    if (record.verifyCount >= MAX_VERIFY_PER_WINDOW) {
-      return {
-        allowed: false,
-        message: "Too many failed attempts. Please request a new OTP.",
-      };
-    }
-    record.verifyCount += 1;
-  }
+  const now = Date.now();
 
-  return { allowed: true };
+  try {
+    const existing = await db
+      .prepare("SELECT * FROM otp_rate_limits WHERE phone = ? LIMIT 1")
+      .bind(phone)
+      .first();
+
+    if (!existing) {
+      const initialSend = action === "send" ? 1 : 0;
+      const initialVerify = action === "verify" ? 1 : 0;
+      await db
+        .prepare(
+          "INSERT INTO otp_rate_limits (phone, send_count, verify_count, window_start) VALUES (?, ?, ?, ?)"
+        )
+        .bind(phone, initialSend, initialVerify, new Date(now).toISOString())
+        .run();
+      return { allowed: true };
+    }
+
+    const windowStartMs =
+      typeof existing.window_start === "number"
+        ? existing.window_start
+        : new Date(existing.window_start).getTime();
+
+    // Check if window is older than 10 minutes -> reset counters
+    if (isNaN(windowStartMs) || now - windowStartMs > RATE_LIMIT_WINDOW_MS) {
+      const newSend = action === "send" ? 1 : 0;
+      const newVerify = action === "verify" ? 1 : 0;
+      await db
+        .prepare(
+          "UPDATE otp_rate_limits SET send_count = ?, verify_count = ?, window_start = ? WHERE phone = ?"
+        )
+        .bind(newSend, newVerify, new Date(now).toISOString(), phone)
+        .run();
+      return { allowed: true };
+    }
+
+    // Active 10-minute window
+    if (action === "send") {
+      if ((existing.send_count ?? 0) >= MAX_SEND_PER_WINDOW) {
+        return {
+          allowed: false,
+          message: "Too many OTP requests. Please wait a few minutes before trying again.",
+        };
+      }
+      await db
+        .prepare("UPDATE otp_rate_limits SET send_count = send_count + 1 WHERE phone = ?")
+        .bind(phone)
+        .run();
+    } else {
+      if ((existing.verify_count ?? 0) >= MAX_VERIFY_PER_WINDOW) {
+        return {
+          allowed: false,
+          message: "Too many failed attempts. Please request a new OTP.",
+        };
+      }
+      await db
+        .prepare("UPDATE otp_rate_limits SET verify_count = verify_count + 1 WHERE phone = ?")
+        .bind(phone)
+        .run();
+    }
+
+    return { allowed: true };
+  } catch (err) {
+    console.error("[OTP Rate Limit Error]", err);
+    return { allowed: true };
+  }
 }
 
 /**
  * Sends an OTP to the given phone number using Twilio Verify
  */
-export async function sendOtp(rawPhone: string, purpose: string = "login"): Promise<SendOtpResult> {
+export async function sendOtp(
+  rawPhone: string,
+  purpose: string = "login",
+  env?: any
+): Promise<SendOtpResult> {
   const phone = normalizePhone(rawPhone);
   if (!/^\+\d{10,15}$/.test(phone)) {
-    throw new Error("Invalid phone number format. Please provide a valid number with country code (e.g. +919876543210)");
+    throw new Error(
+      "Invalid phone number format. Please provide a valid number with country code (e.g. +919876543210)"
+    );
   }
 
-  const rateLimit = checkRateLimit(phone, "send");
+  const { accountSid, authToken, verifySid, db } = getTwilioCredentials(env);
+
+  const rateLimit = await checkRateLimit(phone, "send", db);
   if (!rateLimit.allowed) {
     const err: any = new Error(rateLimit.message);
     err.statusCode = 429;
     throw err;
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
-
-  const missingCreds = !accountSid || isPlaceholderCredential(accountSid) ||
-                        !authToken || isPlaceholderCredential(authToken) ||
-                        !verifySid || isPlaceholderCredential(verifySid);
+  const missingCreds =
+    !accountSid ||
+    isPlaceholderCredential(accountSid) ||
+    !authToken ||
+    isPlaceholderCredential(authToken) ||
+    !verifySid ||
+    isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
     console.error("[Twilio Verify] Configuration missing or invalid", {
@@ -171,13 +218,15 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
       hasVerifySid: !!verifySid,
       accountSidValid: !isPlaceholderCredential(accountSid),
       authSidValid: !isPlaceholderCredential(authToken),
-      verifySidValid: !isPlaceholderCredential(verifySid)
+      verifySidValid: !isPlaceholderCredential(verifySid),
     });
     throw new Error("Twilio credentials are not configured correctly.");
   }
 
   try {
-    console.log(`[Twilio Verify] Sending verification to ${phone} using service ${verifySid!.substring(0, 4)}...`);
+    console.log(
+      `[Twilio Verify] Sending verification to ${phone} using service ${verifySid!.substring(0, 4)}...`
+    );
     const client = twilio(accountSid, authToken);
     await client.verify.v2.services(verifySid!).verifications.create({
       to: phone,
@@ -203,7 +252,11 @@ export async function sendOtp(rawPhone: string, purpose: string = "login"): Prom
 /**
  * Verifies an OTP code for a given phone number using Twilio Verify
  */
-export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyOtpResult> {
+export async function verifyOtp(
+  rawPhone: string,
+  code: string,
+  env?: any
+): Promise<VerifyOtpResult> {
   const phone = normalizePhone(rawPhone);
   const cleanedCode = code.trim();
 
@@ -214,18 +267,20 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
     return { ok: false, statusCode: 400, message: "Invalid OTP code." };
   }
 
-  const rateLimit = checkRateLimit(phone, "verify");
+  const { accountSid, authToken, verifySid, db } = getTwilioCredentials(env);
+
+  const rateLimit = await checkRateLimit(phone, "verify", db);
   if (!rateLimit.allowed) {
     return { ok: false, statusCode: 429, message: rateLimit.message };
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
-
-  const missingCreds = !accountSid || isPlaceholderCredential(accountSid) ||
-                        !authToken || isPlaceholderCredential(authToken) ||
-                        !verifySid || isPlaceholderCredential(verifySid);
+  const missingCreds =
+    !accountSid ||
+    isPlaceholderCredential(accountSid) ||
+    !authToken ||
+    isPlaceholderCredential(authToken) ||
+    !verifySid ||
+    isPlaceholderCredential(verifySid);
 
   if (missingCreds) {
     console.error("[Twilio Verify] Configuration missing or invalid", {
@@ -234,17 +289,19 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
       hasVerifySid: !!verifySid,
       accountSidValid: !isPlaceholderCredential(accountSid),
       authSidValid: !isPlaceholderCredential(authToken),
-      verifySidValid: !isPlaceholderCredential(verifySid)
+      verifySidValid: !isPlaceholderCredential(verifySid),
     });
     return {
       ok: false,
       statusCode: 401,
-      message: "Twilio credentials are not configured correctly."
+      message: "Twilio credentials are not configured correctly.",
     };
   }
 
   try {
-    console.log(`[Twilio Verify] Checking verification for ${phone} using service ${verifySid!.substring(0, 4)}...`);
+    console.log(
+      `[Twilio Verify] Checking verification for ${phone} using service ${verifySid!.substring(0, 4)}...`
+    );
     const client = twilio(accountSid, authToken);
     const check = await client.verify.v2
       .services(verifySid!)
@@ -254,17 +311,17 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
       });
 
     console.log("[OTP Login] Twilio verification status:", {
-      status: check.status
+      status: check.status,
     });
 
     if (check.status === "approved") {
       return { ok: true };
     }
-    
-    return { 
-      ok: false, 
-      statusCode: 401, 
-      message: "Invalid or expired verification code. Please request a new OTP." 
+
+    return {
+      ok: false,
+      statusCode: 401,
+      message: "Invalid or expired verification code. Please request a new OTP.",
     };
   } catch (error: any) {
     console.error("[Twilio Verify]", {
@@ -272,7 +329,7 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<VerifyO
       status: error.status,
       message: error.message,
     });
-    
+
     return {
       ok: false,
       statusCode: error.status || 400,

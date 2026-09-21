@@ -1,5 +1,6 @@
 import { D1Storage, setGlobalStorage } from "./storage";
 import { verifyOtp, sendOtp, getOtpServiceStatus } from "./otpService";
+import { UserRole } from "../shared/schema";
 
 interface Env {
   DB: any;
@@ -68,11 +69,7 @@ export default {
         }
 
         const r2Ok = !!env.ASSETS;
-        const twilioOk = !!(
-          process.env.TWILIO_ACCOUNT_SID &&
-          process.env.TWILIO_AUTH_TOKEN &&
-          process.env.TWILIO_VERIFY_SERVICE_SID
-        );
+        const twilioOk = getOtpServiceStatus(env).configured;
         const ccavenueOk = !!(
           process.env.CCAVENUE_MERCHANT_ID &&
           process.env.CCAVENUE_ACCESS_CODE &&
@@ -252,14 +249,14 @@ export default {
       // === OTP AUTHENTICATION & TWILIO VERIFY ===
       if (path === "/api/send-otp" && method === "POST") {
         const body = await request.json();
-        const result = await sendOtp(body.phone, body.purpose || "login");
+        const result = await sendOtp(body.phone, body.purpose || "login", env);
         return jsonResponse(result);
       }
 
       if (path === "/api/verify-otp" && method === "POST") {
         const body = await request.json();
         const { phone, code } = body;
-        const result = await verifyOtp(phone, code);
+        const result = await verifyOtp(phone, code, env);
 
         if (!result.ok) {
           return jsonResponse({ success: false, message: result.message || "OTP verification failed" }, result.statusCode || 401);
