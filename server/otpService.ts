@@ -1,5 +1,3 @@
-import twilio from "twilio";
-
 export interface SendOtpResult {
   ok: boolean;
   message: string;
@@ -180,7 +178,7 @@ async function checkRateLimit(
 }
 
 /**
- * Sends an OTP to the given phone number using Twilio Verify
+ * Sends an OTP to the given phone number using Twilio Verify REST API via native fetch
  */
 export async function sendOtp(
   rawPhone: string,
@@ -227,11 +225,32 @@ export async function sendOtp(
     console.log(
       `[Twilio Verify] Sending verification to ${phone} using service ${verifySid!.substring(0, 4)}...`
     );
-    const client = twilio(accountSid, authToken);
-    await client.verify.v2.services(verifySid!).verifications.create({
-      to: phone,
-      channel: "sms",
+
+    const auth = btoa(`${accountSid}:${authToken}`);
+    const body = new URLSearchParams({
+      To: phone,
+      Channel: "sms",
     });
+
+    const response = await fetch(
+      `https://verify.twilio.com/v2/Services/${verifySid}/Verifications`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error("[Twilio Verify Error]", response.status, data);
+      throw new Error("Unable to send verification code. Please try again.");
+    }
+
     console.log(`[Twilio Verify] Verification sent successfully to ${phone}`);
     return {
       ok: true,
@@ -239,18 +258,13 @@ export async function sendOtp(
       channel: "verify",
     };
   } catch (error: any) {
-    console.error("[Twilio Verify]", {
-      code: error.code,
-      status: error.status,
-      message: error.message,
-    });
-
-    throw new Error(`Unable to send verification code. Please try again.`);
+    console.error("[Twilio Verify Error]", error.message || error);
+    throw new Error(error.message || "Unable to send verification code. Please try again.");
   }
 }
 
 /**
- * Verifies an OTP code for a given phone number using Twilio Verify
+ * Verifies an OTP code for a given phone number using Twilio Verify REST API via native fetch
  */
 export async function verifyOtp(
   rawPhone: string,
@@ -302,19 +316,41 @@ export async function verifyOtp(
     console.log(
       `[Twilio Verify] Checking verification for ${phone} using service ${verifySid!.substring(0, 4)}...`
     );
-    const client = twilio(accountSid, authToken);
-    const check = await client.verify.v2
-      .services(verifySid!)
-      .verificationChecks.create({
-        to: phone,
-        code: cleanedCode,
-      });
 
-    console.log("[OTP Login] Twilio verification status:", {
-      status: check.status,
+    const auth = btoa(`${accountSid}:${authToken}`);
+    const body = new URLSearchParams({
+      To: phone,
+      Code: cleanedCode,
     });
 
-    if (check.status === "approved") {
+    const response = await fetch(
+      `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error("[Twilio Verify Check Error]", response.status, data);
+      return {
+        ok: false,
+        statusCode: response.status || 400,
+        message: "Verification check failed. Please try again.",
+      };
+    }
+
+    console.log("[OTP Login] Twilio verification status:", {
+      status: data.status,
+    });
+
+    if (data.status === "approved") {
       return { ok: true };
     }
 
@@ -324,12 +360,7 @@ export async function verifyOtp(
       message: "Invalid or expired verification code. Please request a new OTP.",
     };
   } catch (error: any) {
-    console.error("[Twilio Verify]", {
-      code: error.code,
-      status: error.status,
-      message: error.message,
-    });
-
+    console.error("[Twilio Verify Error]", error.message || error);
     return {
       ok: false,
       statusCode: error.status || 400,
