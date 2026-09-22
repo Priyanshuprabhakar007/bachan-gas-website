@@ -636,7 +636,7 @@ export default {
           encResp = url.searchParams.get("encResp") || "";
         }
 
-        const frontendUrl = "https://bachangasdemo.netlify.app";
+        const frontendUrl = (env.FRONTEND_URL || "").replace(/\/+$/, "");
         if (!encResp) {
           return Response.redirect(`${frontendUrl}/payment/failure?error=no_response`, 302);
         }
