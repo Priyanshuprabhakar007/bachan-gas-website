@@ -389,6 +389,123 @@ export default {
         return jsonResponse({ configured }, 200, request, env);
       }
 
+      if (path === "/api/payments/ccavenue/initiate" && method === "POST") {
+        const user = await getAuthenticatedUser(request, env, storage);
+        if (!user) return errorResponse("Unauthorized", 401, undefined, request, env);
+
+        const body = await request.json().catch(() => ({}));
+        const orderId = Number(body.orderId);
+        if (isNaN(orderId) || orderId <= 0 || !Number.isInteger(orderId)) {
+          return errorResponse("Invalid order ID", 400, undefined, request, env);
+        }
+
+        const order = await storage.getOrder(orderId);
+        if (!order) {
+          return errorResponse("Order not found", 404, undefined, request, env);
+        }
+
+        const settings = await storage.getSiteSettings();
+        if (!settings?.ccavenueEnabled) {
+          return errorResponse("CCAvenue payments are currently disabled", 400, undefined, request, env);
+        }
+
+        const merchantId = env.CCAVENUE_MERCHANT_ID;
+        const accessCode = env.CCAVENUE_ACCESS_CODE;
+        const workingKey = env.CCAVENUE_WORKING_KEY;
+
+        if (!merchantId || !accessCode || !workingKey) {
+          return errorResponse("CCAvenue is not configured. Please contact administrator.", 500, undefined, request, env);
+        }
+
+        const baseAmountPaise = Number(order.totalPaise || 0);
+        if (baseAmountPaise <= 0) {
+          return errorResponse("Invalid order amount", 400, undefined, request, env);
+        }
+
+        let convenienceFeeAmountPaise = 0;
+        let totalAmountPaise = baseAmountPaise;
+        const feePercent = parseFloat(settings.ccavenueFeePercent || "0.25");
+        const roundingMode = settings.ccavenueRoundingMode || "ROUND_2_DECIMALS";
+
+        if (settings.ccavenueFeeEnabled) {
+          const feeResult = computeConvenienceFee(baseAmountPaise, feePercent, roundingMode);
+          convenienceFeeAmountPaise = feeResult.convenienceFeeAmountPaise;
+          totalAmountPaise = feeResult.totalAmountPaise;
+        }
+
+        const merchantTxnId = generateMerchantTxnId();
+        const totalAmountRupees = (totalAmountPaise / 100).toFixed(2);
+
+        const txn = await storage.createPaymentTransaction({
+          orderId: order.id,
+          gateway: "CCAVENUE",
+          baseAmountPaise,
+          convenienceFeeAmountPaise,
+          totalAmountPaise,
+          currency: "INR",
+          status: "INITIATED",
+          merchantTxnId,
+          feePercent: feePercent.toString(),
+          roundingMode,
+          customerName: order.customerName || user.name || "Customer",
+          customerPhone: order.phone || user.phone || "",
+          userId: user.id,
+        });
+
+        const workerApiUrl = "https://bachan-gar-api.goyalaclasses.workers.dev";
+        const redirectUrl = env.CCAVENUE_REDIRECT_URL || `${workerApiUrl}/api/payments/ccavenue/callback`;
+        const cancelUrl = env.CCAVENUE_CANCEL_URL || redirectUrl;
+
+        const resolvedName = order.customerName || user.name || "Customer";
+        const resolvedPhone = order.phone || user.phone || "";
+        const resolvedEmail = user.email || "";
+        const resolvedAddress = order.deliveryAddress || user.address || "";
+
+        const params = [
+          `merchant_id=${merchantId}`,
+          `order_id=${merchantTxnId}`,
+          `currency=INR`,
+          `amount=${totalAmountRupees}`,
+          `redirect_url=${redirectUrl}`,
+          `cancel_url=${cancelUrl}`,
+          `language=EN`,
+          `billing_name=${encodeURIComponent(resolvedName)}`,
+          `billing_tel=${encodeURIComponent(resolvedPhone)}`,
+          `billing_email=${encodeURIComponent(resolvedEmail)}`,
+          `billing_address=${encodeURIComponent(resolvedAddress)}`,
+          `billing_city=`,
+          `billing_state=`,
+          `billing_zip=`,
+          `billing_country=India`,
+          `merchant_param1=${order.id}`,
+          `merchant_param2=${txn.id}`,
+        ].join("&");
+
+        const encRequest = ccEncrypt(params, workingKey);
+
+        await storage.updatePaymentTransaction(txn.id, {
+          requestPayloadJson: { params } as any,
+        });
+
+        const ccavenueBase = env.CCAVENUE_URL || "https://secure.ccavenue.com";
+        const ccavenueUrl = `${ccavenueBase.replace(/\/$/, "")}/transaction/transaction.do?command=initiateTransaction`;
+
+        const formHtml = `<form id="ccavenue_payment_form" method="post" action="${ccavenueUrl}">
+          <input type="hidden" name="encRequest" value="${encRequest}" />
+          <input type="hidden" name="access_code" value="${accessCode}" />
+        </form>
+        <script>document.getElementById("ccavenue_payment_form").submit();</script>`;
+
+        return jsonResponse({
+          transactionId: txn.id,
+          merchantTxnId,
+          baseAmountPaise,
+          convenienceFeeAmountPaise,
+          totalAmountPaise,
+          formHtml,
+        }, 200, request, env);
+      }
+
       if (path === "/api/payments/ccavenue/direct" && method === "POST") {
         const user = await getAuthenticatedUser(request, env, storage);
         if (!user) return errorResponse("Unauthorized", 401, undefined, request, env);
