@@ -20,7 +20,11 @@ export default function AdminLogin() {
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
-    onSuccess: (user) => {
+    onSuccess: (data: any) => {
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
+      const user = data.user || data;
       queryClient.setQueryData(["/api/user"], user);
       const role = user.role?.toUpperCase();
       if (role === "DELIVERY_MAN") {

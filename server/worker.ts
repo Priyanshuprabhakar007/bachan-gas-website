@@ -321,6 +321,62 @@ export default {
         return jsonResponse({ success: true }, 200, request, env);
       }
 
+      // === ADMIN / STAFF LOGIN ===
+      if (path === "/api/login" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const inputUsername = (body.username || "").trim();
+        const inputPassword = (body.password || "").trim();
+
+        const adminUsername = env.ADMIN_USERNAME || "admin";
+        const adminPassword = env.ADMIN_PASSWORD;
+
+        if (!adminPassword) {
+          return errorResponse("Admin login is not configured", 500, undefined, request, env);
+        }
+
+        if (inputUsername !== adminUsername || inputPassword !== adminPassword) {
+          return errorResponse("Invalid username or password", 401, undefined, request, env);
+        }
+
+        const user = await storage.getUserByUsername(inputUsername);
+        if (!user || user.isActive === false) {
+          return errorResponse("Invalid username or password", 401, undefined, request, env);
+        }
+
+        const roleUpper = (user.role || "").toUpperCase();
+        if (roleUpper === "CUSTOMER") {
+          return errorResponse("Invalid username or password", 401, undefined, request, env);
+        }
+
+        // Generate session token (30 days)
+        const randomBytes = new Uint8Array(32);
+        crypto.getRandomValues(randomBytes);
+        const token = Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        const encoder = new TextEncoder();
+        const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(token));
+        const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        await env.DB.prepare(
+          "INSERT INTO auth_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)"
+        ).bind(user.id, tokenHash, expiresAt).run();
+
+        return jsonResponse({
+          success: true,
+          authenticated: true,
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+            email: user.email,
+            phone: user.phone,
+          },
+        }, 200, request, env);
+      }
+
       // === OTP AUTHENTICATION & TWILIO VERIFY ===
       if (path === "/api/send-otp" && method === "POST") {
         const body = await request.json();
