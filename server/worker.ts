@@ -692,7 +692,10 @@ export default {
           encResp = url.searchParams.get("encResp") || "";
         }
 
-        const frontendUrl = (env.FRONTEND_URL || "").replace(/\/+$/, "");
+        const frontendUrl = (
+          env.FRONTEND_URL ||
+          "https://bachangasonline.netlify.app"
+        ).replace(/\/+$/, "");
         if (!encResp) {
           return Response.redirect(`${frontendUrl}/payment/failure?error=no_response`, 302);
         }
