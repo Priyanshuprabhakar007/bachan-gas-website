@@ -337,7 +337,7 @@ export default function ProductsPage() {
                     <img
                       src={product.imageUrl}
                       alt={product.name}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain p-4"
                       data-testid={`img-product-${product.id}`}
                     />
                   </div>

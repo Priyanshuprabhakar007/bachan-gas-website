@@ -185,7 +185,7 @@ export default {
           httpMetadata: { contentType: mimeType },
         });
 
-        const publicUrl = `/media/${key}`;
+        const publicUrl = `${new URL(request.url).origin}/media/${key}`;
         return jsonResponse({
           success: true,
           key,

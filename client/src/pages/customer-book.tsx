@@ -371,7 +371,7 @@ export default function CustomerBookRefill() {
                         <img
                           src={product.imageUrl}
                           alt={product.name}
-                          className="object-cover w-full h-full"
+                          className="h-full w-full object-contain p-4"
                           data-testid={`img-product-${product.id}`}
                         />
                       ) : (

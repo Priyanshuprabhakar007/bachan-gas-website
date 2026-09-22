@@ -232,7 +232,7 @@ export default function ProductDetailsPage() {
                   <img
                     src={allImages[selectedImageIndex]}
                     alt={product.name}
-                    className="w-full aspect-[4/3] object-cover rounded-lg"
+                    className="w-full aspect-[4/3] object-contain p-4 rounded-lg"
                     data-testid="img-main-preview"
                   />
                   {allImages.length > 1 && (

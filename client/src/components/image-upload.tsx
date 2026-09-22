@@ -4,8 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Upload, X, Link, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { resolveUrl } from "@/lib/queryClient";
 
 interface ImageUploadProps {
   value: string | null;
@@ -19,9 +18,7 @@ const MAX_SIZE = 5 * 1024 * 1024;
 
 export function ImageUpload({ value, onChange, label, className }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [urlInput, setUrlInput] = useState("");
-  const [storageKey, setStorageKey] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -37,31 +34,37 @@ export function ImageUpload({ value, onChange, label, className }: ImageUploadPr
     }
 
     setUploading(true);
-    setProgress(0);
     try {
-      const fileRef = ref(storage, `products/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`);
-      const uploadTask = uploadBytesResumable(fileRef, file);
+      const token = localStorage.getItem("auth_token");
+      const headers: Record<string, string> = {
+        "Content-Type": file.type,
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
 
-      uploadTask.on('state_changed', 
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setProgress(progress);
-        }, 
-        (error) => {
-          console.error("Upload error:", error);
-          toast({ title: "Upload failed", description: "Image upload failed. Please try again.", variant: "destructive" });
-          setUploading(false);
-        }, 
-        async () => {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          setStorageKey(uploadTask.snapshot.ref.fullPath);
-          onChange(url, uploadTask.snapshot.ref.fullPath);
-          setUploading(false);
-        }
-      );
-    } catch (err: unknown) {
-      console.error("Upload initialization error:", err);
-      toast({ title: "Upload failed", description: "Image upload failed. Please try again.", variant: "destructive" });
+      const res = await fetch(resolveUrl("/api/admin/upload?prefix=products"), {
+        method: "POST",
+        headers,
+        body: file,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || "Upload failed");
+      }
+
+      const data = await res.json();
+      if (data.success && data.url) {
+        onChange(data.url, data.key);
+      } else {
+        throw new Error("Invalid upload response");
+      }
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast({ title: "Upload failed", description: err.message || "Image upload failed. Please try again.", variant: "destructive" });
+    } finally {
       setUploading(false);
     }
   }, [onChange, toast]);
@@ -91,22 +94,13 @@ export function ImageUpload({ value, onChange, label, className }: ImageUploadPr
   const handleUseUrl = useCallback(() => {
     const trimmed = urlInput.trim();
     if (!trimmed) return;
-    setStorageKey(null);
     onChange(trimmed, null);
     setUrlInput("");
   }, [urlInput, onChange]);
 
   const handleRemove = useCallback(async () => {
-    if (storageKey) {
-      try {
-        await deleteObject(ref(storage, storageKey));
-      } catch (err) {
-        console.error("Failed to delete old image:", err);
-      }
-    }
-    setStorageKey(null);
     onChange(null, null);
-  }, [storageKey, onChange]);
+  }, [onChange]);
 
   return (
     <div className={className}>
@@ -123,17 +117,17 @@ export function ImageUpload({ value, onChange, label, className }: ImageUploadPr
         {uploading && (
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">Uploading {Math.round(progress)}%...</p>
+            <p className="mt-2 text-sm text-muted-foreground">Uploading image...</p>
           </div>
         )}
 
         {!uploading && value && (
           <div className="relative">
-            <div className="aspect-video w-full overflow-hidden rounded-md">
+            <div className="aspect-video w-full overflow-hidden rounded-md bg-muted/20">
               <img
                 src={value}
                 alt="Uploaded"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain p-2"
                 data-testid="image-upload-preview"
               />
             </div>

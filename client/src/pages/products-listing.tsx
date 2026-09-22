@@ -175,7 +175,7 @@ export default function ProductsListingPage() {
                         <img
                           src={product.imageUrl}
                           alt={product.name}
-                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                          className="h-full w-full object-contain p-4 group-hover:scale-105 transition-transform duration-300"
                           data-testid={`img-product-${product.id}`}
                         />
                       ) : (
