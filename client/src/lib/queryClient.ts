@@ -9,6 +9,24 @@ export function resolveUrl(url: string) {
   return url;
 }
 
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const resolvedUrl = resolveUrl(url.startsWith("/") ? url : `/${url}`);
+  const headers = new Headers(options.headers || {});
+  const token = localStorage.getItem("auth_token");
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const res = await fetch(resolvedUrl, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("auth_token");
+  }
+  return res;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -22,12 +40,21 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const resolvedUrl = resolveUrl(url);
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetch(resolvedUrl, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem("auth_token");
+  }
 
   await throwIfResNotOk(res);
   return res;
@@ -41,12 +68,21 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const path = queryKey.join("/");
     const resolvedUrl = resolveUrl(path.startsWith("/") ? path : `/${path}`);
+    const headers: Record<string, string> = {};
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
     const res = await fetch(resolvedUrl, {
+      headers,
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      localStorage.removeItem("auth_token");
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
     }
 
     await throwIfResNotOk(res);

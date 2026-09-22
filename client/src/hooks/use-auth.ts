@@ -3,7 +3,7 @@ import { api } from "@shared/routes";
 import { InsertUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { sendOtpWithLogging, verifyOtpWithLogging } from "@/lib/auth-service";
-import { resolveUrl } from "@/lib/queryClient";
+import { resolveUrl, authFetch } from "@/lib/queryClient";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -12,8 +12,11 @@ export function useAuth() {
   const userQuery = useQuery({
     queryKey: [api.auth.me.path],
     queryFn: async () => {
-      const res = await fetch(resolveUrl(api.auth.me.path), { credentials: "include" });
-      if (res.status === 401) return null;
+      const res = await authFetch(api.auth.me.path);
+      if (res.status === 401) {
+        localStorage.removeItem("auth_token");
+        return null;
+      }
       if (!res.ok) throw new Error("Failed to fetch user");
       return api.auth.me.responses[200].parse(await res.json());
     },
@@ -22,18 +25,21 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
-      const res = await fetch(resolveUrl(api.auth.login.path), {
+      const res = await authFetch(api.auth.login.path, {
         method: api.auth.login.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
-        credentials: "include",
       });
 
       if (!res.ok) {
         if (res.status === 401) throw new Error("Invalid credentials");
         throw new Error("Login failed");
       }
-      return api.auth.login.responses[200].parse(await res.json());
+      const data = await res.json();
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
+      return api.auth.login.responses[200].parse(data);
     },
     onSuccess: (user) => {
       queryClient.setQueryData([api.auth.me.path], user);
@@ -46,11 +52,10 @@ export function useAuth() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: InsertUser) => {
-      const res = await fetch(resolveUrl(api.auth.register.path), {
+      const res = await authFetch(api.auth.register.path, {
         method: api.auth.register.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-        credentials: "include",
       });
 
       if (!res.ok) {
@@ -69,7 +74,8 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch(resolveUrl(api.auth.logout.path), { method: api.auth.logout.method, credentials: "include" });
+      await authFetch(api.auth.logout.path, { method: api.auth.logout.method });
+      localStorage.removeItem("auth_token");
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);
@@ -89,6 +95,9 @@ export function useAuth() {
       return await verifyOtpWithLogging(phone, code);
     },
     onSuccess: (data) => {
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
       queryClient.setQueryData([api.auth.me.path], data.user);
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       if (data.user?.phone) {

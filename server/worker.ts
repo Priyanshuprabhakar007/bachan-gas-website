@@ -1,11 +1,37 @@
 import { D1Storage } from "./d1Storage";
 import { verifyOtp, sendOtp, getOtpServiceStatus } from "./otpService";
 import { UserRole } from "../shared/schema";
+import { encrypt as ccEncrypt, decrypt as ccDecrypt, computeConvenienceFee, generateMerchantTxnId, parseCallbackResponse } from "./ccavenue";
 
 interface Env {
   DB: any;
   ASSETS: any;
   [key: string]: any;
+}
+
+async function getAuthenticatedUser(request: Request, env: Env, storage: D1Storage) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+
+  try {
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(token));
+    const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const session = await env.DB.prepare(
+      "SELECT * FROM auth_sessions WHERE token_hash = ? AND expires_at > datetime('now')"
+    ).bind(tokenHash).first();
+
+    if (!session) return null;
+
+    const user = await storage.getUser(session.user_id);
+    if (!user || !user.isActive) return null;
+    return user;
+  } catch (err) {
+    console.error("[Auth Error]", err);
+    return null;
+  }
 }
 
 function getCorsHeaders(request: Request, env: Env): HeadersInit {
@@ -259,6 +285,42 @@ export default {
         return jsonResponse(settings, 200, request, env);
       }
 
+      // === AUTHENTICATION & SESSIONS ===
+      if (path === "/api/user" && method === "GET") {
+        const user = await getAuthenticatedUser(request, env, storage);
+        if (!user) {
+          return errorResponse("Unauthorized", 401, undefined, request, env);
+        }
+        return jsonResponse({
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          staffId: user.staffId,
+          consumerId: user.consumerId,
+          customerType: user.customerType,
+          address: user.address,
+          route: user.route,
+          outstandingBalance: user.outstandingBalance,
+          isActive: user.isActive,
+          avatarUrl: user.avatarUrl,
+        }, 200, request, env);
+      }
+
+      if (path === "/api/logout" && method === "POST") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+        if (token) {
+          const encoder = new TextEncoder();
+          const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(token));
+          const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+          await env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(tokenHash).run();
+        }
+        return jsonResponse({ success: true }, 200, request, env);
+      }
+
       // === OTP AUTHENTICATION & TWILIO VERIFY ===
       if (path === "/api/send-otp" && method === "POST") {
         const body = await request.json();
@@ -272,7 +334,7 @@ export default {
         const result = await verifyOtp(phone, code, env);
 
         if (!result.ok) {
-          return jsonResponse({ success: false, message: result.message || "OTP verification failed" }, result.statusCode || 401, request, env);
+          return jsonResponse({ success: false, message: result.message || "Invalid or expired verification code. Please request a new OTP." }, result.statusCode || 401, request, env);
         }
 
         // Retrieve or create customer in D1 database upon successful verification
@@ -290,9 +352,24 @@ export default {
           });
         }
 
+        // Generate session token (30 days)
+        const randomBytes = new Uint8Array(32);
+        crypto.getRandomValues(randomBytes);
+        const token = Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        const encoder = new TextEncoder();
+        const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(token));
+        const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        await env.DB.prepare(
+          "INSERT INTO auth_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)"
+        ).bind(user.id, tokenHash, expiresAt).run();
+
         return jsonResponse({
           success: true,
-          message: "OTP verified successfully",
+          authenticated: true,
+          token,
           user: {
             id: user.id,
             name: user.name,
@@ -300,6 +377,213 @@ export default {
             role: user.role,
           },
         }, 200, request, env);
+      }
+
+      // === CCAVENUE PAYMENT ROUTES ===
+      if (path === "/api/payments/ccavenue/config" && method === "GET") {
+        const configured = !!(
+          env.CCAVENUE_MERCHANT_ID &&
+          env.CCAVENUE_ACCESS_CODE &&
+          env.CCAVENUE_WORKING_KEY
+        );
+        return jsonResponse({ configured }, 200, request, env);
+      }
+
+      if (path === "/api/payments/ccavenue/direct" && method === "POST") {
+        const user = await getAuthenticatedUser(request, env, storage);
+        if (!user) return errorResponse("Unauthorized", 401, undefined, request, env);
+
+        const settings = await storage.getSiteSettings();
+        if (!settings?.ccavenueEnabled) {
+          return errorResponse("CCAvenue payments are currently disabled", 400, undefined, request, env);
+        }
+
+        const merchantId = env.CCAVENUE_MERCHANT_ID;
+        const accessCode = env.CCAVENUE_ACCESS_CODE;
+        const workingKey = env.CCAVENUE_WORKING_KEY;
+
+        if (!merchantId || !accessCode || !workingKey) {
+          return errorResponse("CCAvenue is not configured. Please contact administrator.", 500, undefined, request, env);
+        }
+
+        const body = await request.json().catch(() => ({}));
+        const amountRupees = Number(body.amountRupees);
+        if (isNaN(amountRupees) || amountRupees < 1 || amountRupees > 500000) {
+          return errorResponse("Invalid amount. Must be between 1 and 500000.", 400, undefined, request, env);
+        }
+
+        let currentUser = user;
+        const isNameMissing = !currentUser.name || currentUser.name === "Customer";
+        if (isNameMissing && body.customerName) {
+          currentUser = await storage.updateUser(currentUser.id, { name: body.customerName });
+        } else if (isNameMissing && !body.customerName) {
+          return errorResponse("Please enter your name", 400, undefined, request, env);
+        }
+
+        const resolvedName = currentUser.name || body.customerName || "Customer";
+        const resolvedPhone = currentUser.phone || "";
+
+        const baseAmountPaise = Math.round(amountRupees * 100);
+        let convenienceFeeAmountPaise = 0;
+        let totalAmountPaise = baseAmountPaise;
+        const feePercent = parseFloat(settings.ccavenueFeePercent || "0.25");
+        const roundingMode = settings.ccavenueRoundingMode || "ROUND_2_DECIMALS";
+
+        if (settings.ccavenueFeeEnabled) {
+          const feeResult = computeConvenienceFee(baseAmountPaise, feePercent, roundingMode);
+          convenienceFeeAmountPaise = feeResult.convenienceFeeAmountPaise;
+          totalAmountPaise = feeResult.totalAmountPaise;
+        }
+
+        const merchantTxnId = generateMerchantTxnId();
+        const totalAmountRupees = (totalAmountPaise / 100).toFixed(2);
+
+        const txn = await storage.createPaymentTransaction({
+          orderId: null,
+          gateway: "CCAVENUE",
+          baseAmountPaise,
+          convenienceFeeAmountPaise,
+          totalAmountPaise,
+          currency: "INR",
+          status: "INITIATED",
+          merchantTxnId,
+          feePercent: feePercent.toString(),
+          roundingMode,
+          customerName: resolvedName,
+          customerPhone: resolvedPhone,
+          userId: currentUser.id,
+        });
+
+        const workerApiUrl = "https://bachan-gar-api.goyalaclasses.workers.dev";
+        const redirectUrl = env.CCAVENUE_REDIRECT_URL || `${workerApiUrl}/api/payments/ccavenue/callback`;
+        const cancelUrl = env.CCAVENUE_CANCEL_URL || `${workerApiUrl}/api/payments/ccavenue/callback`;
+
+        const params = [
+          `merchant_id=${merchantId}`,
+          `order_id=${merchantTxnId}`,
+          `currency=INR`,
+          `amount=${totalAmountRupees}`,
+          `redirect_url=${redirectUrl}`,
+          `cancel_url=${cancelUrl}`,
+          `language=EN`,
+          `billing_name=${encodeURIComponent(resolvedName)}`,
+          `billing_tel=${encodeURIComponent(resolvedPhone)}`,
+          `billing_email=${encodeURIComponent(currentUser.email || "")}`,
+          `billing_address=${encodeURIComponent(currentUser.address || "")}`,
+          `billing_city=`,
+          `billing_state=`,
+          `billing_zip=`,
+          `billing_country=India`,
+          `merchant_param1=direct_payment`,
+          `merchant_param2=${txn.id}`,
+          `merchant_param3=${encodeURIComponent(body.purpose || "Direct Payment")}`,
+        ].join("&");
+
+        const encRequest = ccEncrypt(params, workingKey);
+
+        await storage.updatePaymentTransaction(txn.id, {
+          requestPayloadJson: { params } as any,
+        });
+
+        const ccavenueBase = env.CCAVENUE_URL || "https://secure.ccavenue.com";
+        const ccavenueUrl = `${ccavenueBase.replace(/\/$/, "")}/transaction/transaction.do?command=initiateTransaction`;
+        
+        const formHtml = `<form id="ccavenue_payment_form" method="post" action="${ccavenueUrl}">
+          <input type="hidden" name="encRequest" value="${encRequest}" />
+          <input type="hidden" name="access_code" value="${accessCode}" />
+        </form>
+        <script>document.getElementById("ccavenue_payment_form").submit();</script>`;
+
+        return jsonResponse({
+          transactionId: txn.id,
+          merchantTxnId,
+          baseAmountPaise,
+          convenienceFeeAmountPaise,
+          totalAmountPaise,
+          formHtml,
+        }, 200, request, env);
+      }
+
+      if (path === "/api/payments/ccavenue/callback") {
+        let encResp = "";
+        if (method === "POST") {
+          const contentType = request.headers.get("content-type") || "";
+          if (contentType.includes("application/x-www-form-urlencoded")) {
+            const formData = await request.formData();
+            encResp = formData.get("encResp") as string || "";
+          } else {
+            const body = await request.json().catch(() => ({}));
+            encResp = body.encResp || "";
+          }
+        } else if (method === "GET") {
+          encResp = url.searchParams.get("encResp") || "";
+        }
+
+        const frontendUrl = "https://bachangasdemo.netlify.app";
+        if (!encResp) {
+          return Response.redirect(`${frontendUrl}/payment/failure?error=no_response`, 302);
+        }
+
+        const workingKey = env.CCAVENUE_WORKING_KEY;
+        if (!workingKey) {
+          return Response.redirect(`${frontendUrl}/payment/failure?error=config`, 302);
+        }
+
+        try {
+          const responseParams = parseCallbackResponse(encResp, workingKey);
+          const merchantTxnId = responseParams.order_id;
+          const orderStatus = responseParams.order_status;
+          const trackingId = responseParams.tracking_id;
+          const bankRefNo = responseParams.bank_ref_no;
+          const amount = responseParams.amount;
+
+          const txn = await storage.getPaymentTransactionByMerchantTxnId(merchantTxnId);
+          if (!txn) {
+            return Response.redirect(`${frontendUrl}/payment/failure?error=txn_not_found`, 302);
+          }
+
+          if (orderStatus === "Success" && txn.status === "PAID") {
+            return Response.redirect(`${frontendUrl}/payment/success?txnId=${txn.id}`, 302);
+          }
+
+          const receivedPaise = Math.round(parseFloat(amount || "0") * 100);
+          if (receivedPaise !== txn.totalAmountPaise) {
+            await storage.updatePaymentTransaction(txn.id, {
+              status: "FAILED",
+              responsePayloadJson: responseParams as any,
+              gatewayTrackingId: trackingId,
+              bankRefNo: bankRefNo || null,
+            });
+            return Response.redirect(`${frontendUrl}/payment/failure?txnId=${txn.id}&error=amount_mismatch`, 302);
+          }
+
+          if (orderStatus === "Success") {
+            await storage.updatePaymentTransaction(txn.id, {
+              status: "PAID",
+              responsePayloadJson: responseParams as any,
+              gatewayTrackingId: trackingId,
+              bankRefNo: bankRefNo || null,
+            });
+            if (txn.orderId) {
+              await storage.updateOrderStatus(txn.orderId, "CONFIRMED");
+            }
+            return Response.redirect(`${frontendUrl}/payment/success?txnId=${txn.id}`, 302);
+          }
+
+          await storage.updatePaymentTransaction(txn.id, {
+            status: "FAILED",
+            responsePayloadJson: responseParams as any,
+            gatewayTrackingId: trackingId,
+            bankRefNo: bankRefNo || null,
+          });
+          if (txn.orderId) {
+            await storage.updateOrderStatus(txn.orderId, "PAYMENT_FAILED");
+          }
+          return Response.redirect(`${frontendUrl}/payment/failure?txnId=${txn.id}&reason=${encodeURIComponent(orderStatus || "Unknown")}`, 302);
+        } catch (err: any) {
+          console.error("[CCAvenue Callback Error]", err);
+          return Response.redirect(`${frontendUrl}/payment/failure?error=decrypt_error`, 302);
+        }
       }
 
       // === ORDERS ENDPOINTS ===
